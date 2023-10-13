@@ -48,5 +48,14 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
+  /****************************************************************************************/
+  /* Airlines                                                                             */
+  /****************************************************************************************/
+
+  it('should register first airline upon deployment', async () => {
+    airlines = await config.flightSuretyData.airlines.call();
+
+    assert.equal(airlines.length == 1, 'No airlines were registered upon deployment');
+  });
 
 });

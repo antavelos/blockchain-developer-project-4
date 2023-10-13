@@ -1,4 +1,6 @@
-pragma solidity ^0.4.25;
+pragma solidity >=0.6.0 <0.8.0;
+
+// SPDX-License-Identifier: MIT
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
@@ -17,6 +19,13 @@ contract FlightSuretyData {
 
     mapping(address => bool) private authorizedCallers;
 
+    // struct Airline {
+    //     address account;
+    //     string name;
+    // }
+
+    // Airline[] airlines = new Airline[](0);
+
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
@@ -26,12 +35,13 @@ contract FlightSuretyData {
     * @dev Constructor
     *      The deploying account becomes contractOwner
     */
-    constructor
-                                (
-                                )
-                                public
-    {
+    constructor(
+        // address firstAirlineAccount,
+        // string firstAirlineName
+    ) {
         contractOwner = msg.sender;
+
+        // airlines.push(Airline(firstAirlineAccount, firstAirlineName));
     }
 
     /********************************************************************************************/
@@ -198,7 +208,7 @@ contract FlightSuretyData {
     * @dev Fallback function for funding smart contract.
     *
     */
-    function() external payable {
+    receive() external payable {
         require(msg.data.length == 0, "Message data should be empty");
 
         fund();

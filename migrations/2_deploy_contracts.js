@@ -8,7 +8,11 @@ const saveConfig = (config, path) => {
 
 module.exports = async (deployer) => {
 
-    let firstAirline = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
+    // const firstAirlineAccount = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
+    // const firstAirlineName = 'First';
+
+    // await deployer.deploy(FlightSuretyData, firstAirlineAccount, firstAirlineName);
+    const firstAirline = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
 
     await deployer.deploy(FlightSuretyData);
     await deployer.deploy(FlightSuretyApp, FlightSuretyData.address);
