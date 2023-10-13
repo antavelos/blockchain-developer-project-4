@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0 <0.8.0;
+pragma abicoder v2;
 
 // SPDX-License-Identifier: MIT
 
@@ -19,29 +20,29 @@ contract FlightSuretyData {
 
     mapping(address => bool) private authorizedCallers;
 
-    // struct Airline {
-    //     address account;
-    //     string name;
-    // }
+    struct Airline {
+        address account;
+        string name;
+    }
 
-    // Airline[] airlines = new Airline[](0);
+
+    Airline[] airlines;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
-
 
     /**
     * @dev Constructor
     *      The deploying account becomes contractOwner
     */
     constructor(
-        // address firstAirlineAccount,
-        // string firstAirlineName
+        address firstAirlineAccount,
+        string memory firstAirlineName
     ) {
         contractOwner = msg.sender;
 
-        // airlines.push(Airline(firstAirlineAccount, firstAirlineName));
+        airlines.push(Airline(firstAirlineAccount, firstAirlineName));
     }
 
     /********************************************************************************************/
@@ -138,6 +139,10 @@ contract FlightSuretyData {
                             external
                             pure
     {
+    }
+
+    function getAirlines() public view returns(Airline[] memory) {
+        return airlines;
     }
 
 

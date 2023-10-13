@@ -2,20 +2,15 @@ const FlightSuretyApp = artifacts.require("FlightSuretyApp");
 const FlightSuretyData = artifacts.require("FlightSuretyData");
 const fs = require('fs');
 
-const saveConfig = (config, path) => {
-  fs.writeFileSync(`${__dirname}/${path}`, JSON.stringify(config, null, '\t'), 'utf-8');
-}
+const saveConfig = (config, path) => fs.writeFileSync(`${__dirname}/${path}`, JSON.stringify(config, null, '\t'), 'utf-8');
+
 
 module.exports = async (deployer) => {
 
-    // const firstAirlineAccount = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
-    // const firstAirlineName = 'First';
+    const firstAirlineAccount = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
+    const firstAirlineName = 'First';
 
-    // await deployer.deploy(FlightSuretyData, firstAirlineAccount, firstAirlineName);
-    const firstAirline = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
-
-    await deployer.deploy(FlightSuretyData);
-    await deployer.deploy(FlightSuretyApp, FlightSuretyData.address);
+    await deployer.deploy(FlightSuretyData, firstAirlineAccount, firstAirlineName);
 
     const config = {
       localhost: {
@@ -25,6 +20,9 @@ module.exports = async (deployer) => {
       }
     };
 
-    ['../src/dapp/config.json', '../src/server/config.json']
+    [
+      '../src/dapp/config.json',
+      '../src/server/config.json'
+    ]
       .forEach(path => saveConfig(config, path));
 }

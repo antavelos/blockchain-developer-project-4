@@ -28,7 +28,7 @@ contract('Flight Surety Tests', async (accounts) => {
         await config.flightSuretyData.setOperatingStatus(!statusBefore, { from: config.testAddresses[2] });
     }
     catch(err) {
-      assert(err.reason, 'Caller is not contract owner');
+      assert.equal(err.data.reason, 'Caller is not contract owner');
     }
     const statusAfter = await config.flightSuretyApp.isOperational.call();
 
@@ -53,9 +53,10 @@ contract('Flight Surety Tests', async (accounts) => {
   /****************************************************************************************/
 
   it('should register first airline upon deployment', async () => {
-    airlines = await config.flightSuretyData.airlines.call();
-
-    assert.equal(airlines.length == 1, 'No airlines were registered upon deployment');
+    const airlines = await config.flightSuretyData.getAirlines.call();
+    assert.equal(airlines.length, 1, 'No airlines were registered upon deployment');
+    assert.equal(airlines[0].account, config.firstAirline.account, 'First airline account does not match');
+    assert.equal(airlines[0].name, config.firstAirline.name, 'First airline name does not match');
   });
 
 });

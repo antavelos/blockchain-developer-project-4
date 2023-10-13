@@ -20,21 +20,14 @@ var Config = async function(accounts) {
     ];
 
 
-    // const owner = accounts[0];
-    // const firstAirline = {
-    //     account: accounts[1],
-    //     name: 'First',
-    // };
-
-    // const flightSuretyData = await FlightSuretyData.new(firstAirline.account, firstAirline.name);
-    // const flightSuretyApp = await FlightSuretyApp.new(flightSuretyData.address);
-
     const owner = accounts[0];
-    const firstAirline = accounts[1];
+    const firstAirline = {
+        account: accounts[1],
+        name: 'First',
+    };
 
-    const flightSuretyData = await FlightSuretyData.new();
+    const flightSuretyData = await FlightSuretyData.new(firstAirline.account, firstAirline.name);
     const flightSuretyApp = await FlightSuretyApp.new(flightSuretyData.address);
-
 
     return {
         owner: owner,
