@@ -11,6 +11,7 @@ module.exports = async (deployer) => {
     const firstAirlineName = 'First';
 
     await deployer.deploy(FlightSuretyData, firstAirlineAccount, firstAirlineName);
+    await deployer.deploy(FlightSuretyApp, FlightSuretyData.address);
 
     const config = {
       localhost: {

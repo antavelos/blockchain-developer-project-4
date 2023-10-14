@@ -1,6 +1,7 @@
-pragma solidity >=0.6.0 <0.8.0;
-
 // SPDX-License-Identifier: MIT
+pragma solidity >=0.6.0 <0.8.0;
+pragma abicoder v2;
+
 
 // It's important to avoid vulnerabilities due to numeric overflow bugs
 // OpenZeppelin's SafeMath library, when used correctly, protects agains such bugs
@@ -8,19 +9,34 @@ pragma solidity >=0.6.0 <0.8.0;
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
-/************************************************** */
-/* FlightSurety Smart Contract                      */
-/************************************************** */
+library FlightSuretyDataTypes {
+    struct AirlineData {
+        string name;
+        int funding;
+    }
+}
+
+contract IFlightSuretyData {
+    function isOperational() public view returns (bool) { }
+    function addAirline(address, string memory) external { }
+    function getAirlineData(address) external view returns (FlightSuretyDataTypes.AirlineData memory) { }
+    function getAirlineNames() external view returns (string[] memory) { }
+    function getAirlinesCount() external view returns (uint) { }
+    function updateAirlineFunding(address, int) external { }
+}
+
 contract FlightSuretyApp {
     using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
-
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
 
     IFlightSuretyData dataContract;
 
-    // Flight status codees
+    int256 private constant MIN_AIRLINE_FUND_IN_WEI = 10 * 10**18;
+    uint private constant MIN_NO_VOTE_AIRLINES_NUM = 4;
+
+    // Flight status codes
     uint8 private constant STATUS_CODE_UNKNOWN = 0;
     uint8 private constant STATUS_CODE_ON_TIME = 10;
     uint8 private constant STATUS_CODE_LATE_AIRLINE = 20;
@@ -38,6 +54,8 @@ contract FlightSuretyApp {
     }
     mapping(bytes32 => Flight) private flights;
 
+    mapping(address => address[]) votesPerCandidateAirline;
+
     bool private operational = true;
 
 
@@ -53,22 +71,45 @@ contract FlightSuretyApp {
     *      This is used on all state changing functions to pause the contract in
     *      the event there is an issue that needs to be fixed
     */
-    modifier requireIsOperational()
-    {
+    modifier requireOperational() {
          // Modify to call data contract's status
-        require(dataContract.isOperational(), "Contract is currently not operational");
+        require(operational, "Contract is not currently operational");
         _;  // All modifiers require an "_" which indicates where the function body will be added
     }
 
     /**
     * @dev Modifier that requires the "ContractOwner" account to be the function caller
     */
-    modifier requireContractOwner()
-    {
+    modifier requireContractOwner() {
         require(msg.sender == contractOwner, "Caller is not contract owner");
         _;
     }
 
+    modifier callerAirlineCanParticipate() {
+        FlightSuretyDataTypes.AirlineData memory data = dataContract.getAirlineData(msg.sender);
+
+        require(bytes(data.name).length > 0, "Caller is not a registered airline");
+
+        require(data.funding >= MIN_AIRLINE_FUND_IN_WEI, "Caller has not submitted sufficient funding yet");
+
+        _;
+    }
+
+    modifier isRegisteredAirline() {
+        FlightSuretyDataTypes.AirlineData memory data = dataContract.getAirlineData(msg.sender);
+
+        require(bytes(data.name).length > 0, "Caller is not a registered airline");
+
+        _;
+    }
+
+    modifier airlineIsNotRegistered(address _account) {
+        FlightSuretyDataTypes.AirlineData memory data = dataContract.getAirlineData(_account);
+
+        require(bytes(data.name).length == 0, "Airline is already registered");
+
+        _;
+    }
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
@@ -86,33 +127,78 @@ contract FlightSuretyApp {
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
-    function isOperational()
-                            public
-                            view
-                            returns(bool)
-    {
-        return dataContract.isOperational();  // Modify to call data contract's status
+    function isOperational() external view returns (bool) {
+        return operational;
+    }
+
+    function setOperatingStatus(bool mode) external requireContractOwner {
+        operational = mode;
+    }
+
+    // TODO: move to library
+    function addressExists(address[] memory _addresses, address _address) private pure returns (bool) {
+        for (uint i = 0; i < _addresses.length; i++) {
+            if (_addresses[i] == _address) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function hasConsensus(uint votesNum, uint totalNum) private pure returns (bool) {
+        // prevents below 1 result in following calculation
+        uint multiplier = 10;
+
+        return votesNum.mul(multiplier).div(totalNum) >= 5;
     }
 
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
+    function fundAirline(
+        int _funding
+    )
+        external
+        isRegisteredAirline
+    {
+        dataContract.updateAirlineFunding(msg.sender, _funding);
+    }
 
    /**
     * @dev Add an airline to the registration queue
     *
     */
-    function registerAirline
-                            (
-                            )
-                            external
-                            pure
-                            returns(bool success, uint256 votes)
+    function registerAirline(
+        address newAirlineAccount,
+        string memory newAirlineName
+    )
+        external
+        requireOperational
+        callerAirlineCanParticipate
+        airlineIsNotRegistered(newAirlineAccount)
     {
-        return (success, 0);
-    }
+        uint totalAirlinesCount = dataContract.getAirlinesCount();
 
+        if (totalAirlinesCount < MIN_NO_VOTE_AIRLINES_NUM ) {
+            dataContract.addAirline(newAirlineAccount, newAirlineName);
+            return;
+        }
+
+        address[] storage votes = votesPerCandidateAirline[newAirlineAccount];
+
+        require(!addressExists(votes, msg.sender), "Caller has alredy voted for the candidate airline");
+
+        votes.push(msg.sender);
+
+        uint totalVotesCount = votes.length;
+
+        if (!hasConsensus(totalVotesCount, totalAirlinesCount)) {
+            return;
+        }
+
+        dataContract.addAirline(newAirlineAccount, newAirlineName);
+    }
 
    /**
     * @dev Register a future flight for insuring.
@@ -341,9 +427,4 @@ contract FlightSuretyApp {
 
 // endregion
 
-}
-
-
-contract IFlightSuretyData {
-    function isOperational() public view returns(bool){ }
 }
