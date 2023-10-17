@@ -9,7 +9,6 @@ import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 contract FlightSuretyData {
     using SafeMath for uint256;
-    using SafeMath for int256;
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
@@ -18,15 +17,29 @@ contract FlightSuretyData {
     // Account used to deploy contract
     address private contractOwner;
 
-
     mapping(address => bool) private authorizedCallers;
 
     struct AirlineData {
         string name;
-        int funding;
+        uint funding;
     }
     mapping(address => AirlineData) private airlines;
     address[] private airlineAccounts;
+
+    struct FlightInsuranceData {
+        // bytes32 flightCode;
+        uint256 amount;
+        uint256 refundAmount;
+    }
+    mapping(address => mapping(string => FlightInsuranceData)) private insurances;
+
+    struct FlightData {
+        // bool isRegistered;
+        uint8 statusCode;
+        uint256 updatedTimestamp;
+        address airline;
+    }
+    mapping(string => FlightData) private flights;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
@@ -133,12 +146,79 @@ contract FlightSuretyData {
 
     function updateAirlineFunding(
         address _airlineAccount,
-        int _funding
+        uint _funding
     )
         external
         requireAuthorizedCaller
     {
         airlines[_airlineAccount].funding = airlines[_airlineAccount].funding + _funding;
+    }
+
+    function addFlight(
+        address airline,
+        string memory flightCode,
+        uint8 statusCode
+    )
+        external
+        requireAuthorizedCaller
+    {
+        flights[flightCode] = FlightData({
+            statusCode: statusCode,
+            updatedTimestamp: block.timestamp,
+            airline: airline
+        });
+    }
+
+    function getFlightData(
+        string memory flightCode
+    )
+        external
+        view
+        requireAuthorizedCaller
+
+        returns (
+            FlightData memory
+        )
+    {
+        return flights[flightCode];
+    }
+
+    function addFlightInsurance(
+        address passenger,
+        string memory flightCode,
+        uint256 amount
+    )
+        external
+        requireAuthorizedCaller
+    {
+        insurances[passenger][flightCode] = FlightInsuranceData({
+            amount: amount,
+            refundAmount: 0
+        });
+    }
+
+    function getFlightInsuranceData(
+        address passenger,
+        string memory flightCode
+    )
+        external
+        view
+        requireAuthorizedCaller
+
+        returns (FlightInsuranceData memory)
+    {
+        return insurances[passenger][flightCode];
+    }
+
+    function setFlightInsuranceRefundAmount(
+        address passenger,
+        string memory flightCode,
+        uint256 refundAmount
+    )
+        external
+        requireAuthorizedCaller
+    {
+        insurances[passenger][flightCode].refundAmount = refundAmount;
     }
 
    /**
@@ -197,15 +277,5 @@ contract FlightSuretyData {
                         returns(bytes32)
     {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
-    }
-
-    /**
-    * @dev Fallback function for funding smart contract.
-    *
-    */
-    receive() external payable {
-        require(msg.data.length == 0, "Message data should be empty");
-
-        fund();
     }
 }

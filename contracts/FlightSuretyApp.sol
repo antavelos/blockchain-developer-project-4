@@ -9,20 +9,38 @@ pragma abicoder v2;
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
-library FlightSuretyDataTypes {
+library DataTypes {
     struct AirlineData {
         string name;
-        int funding;
+        uint funding;
+    }
+
+    struct FlightInsuranceData {
+        // bytes32 flightCode;
+        uint256 amount;
+        uint256 refundAmount;
+    }
+
+    struct FlightData {
+        // bool isRegistered;
+        uint8 statusCode;
+        uint256 updatedTimestamp;
+        address airline;
     }
 }
 
 contract IFlightSuretyData {
-    function isOperational() public view returns (bool) { }
     function addAirline(address, string memory) external { }
-    function getAirlineData(address) external view returns (FlightSuretyDataTypes.AirlineData memory) { }
+    function getAirlineData(address) external view returns (DataTypes.AirlineData memory) { }
     function getAirlineNames() external view returns (string[] memory) { }
     function getAirlinesCount() external view returns (uint) { }
-    function updateAirlineFunding(address, int) external { }
+    function updateAirlineFunding(address, uint) external { }
+    function addFlight(address, string memory, uint8) external { }
+    function getFlightData(string memory) external view returns (DataTypes.FlightData memory) { }
+    function addFlightInsurance(string memory flightCode, uint256 amount) external { }
+    function addFlightInsurance(address, string memory, uint256) external { }
+    function getFlightInsuranceData(address, string memory) external view returns (DataTypes.FlightInsuranceData memory) { }
+    function setFlightInsuranceRefundAmount(address, string memory, uint256) external { }
 }
 
 contract FlightSuretyApp {
@@ -33,8 +51,9 @@ contract FlightSuretyApp {
 
     IFlightSuretyData dataContract;
 
-    int256 private constant MIN_AIRLINE_FUND_IN_WEI = 10 * 10**18;
-    uint private constant MIN_NO_VOTE_AIRLINES_NUM = 4;
+    uint256 private constant MIN_AIRLINE_FUND_IN_WEI = 10 * 10**18;
+    uint256 private constant MIN_NO_VOTE_AIRLINES_NUM = 4;
+    uint256 private constant MAX_INSURANCE_AMOUNT_IN_WEI = 1 * 10**18;
 
     // Flight status codes
     uint8 private constant STATUS_CODE_UNKNOWN = 0;
@@ -46,13 +65,13 @@ contract FlightSuretyApp {
 
     address private contractOwner;          // Account used to deploy contract
 
-    struct Flight {
-        bool isRegistered;
-        uint8 statusCode;
-        uint256 updatedTimestamp;
-        address airline;
-    }
-    mapping(bytes32 => Flight) private flights;
+    // struct Flight {
+    //     bool isRegistered;
+    //     uint8 statusCode;
+    //     uint256 updatedTimestamp;
+    //     address airline;
+    // }
+    // mapping(bytes32 => Flight) private flights;
 
     mapping(address => address[]) votesPerCandidateAirline;
 
@@ -86,7 +105,7 @@ contract FlightSuretyApp {
     }
 
     modifier callerAirlineCanParticipate() {
-        FlightSuretyDataTypes.AirlineData memory data = dataContract.getAirlineData(msg.sender);
+        DataTypes.AirlineData memory data = dataContract.getAirlineData(msg.sender);
 
         require(bytes(data.name).length > 0, "Caller is not a registered airline");
 
@@ -95,18 +114,39 @@ contract FlightSuretyApp {
         _;
     }
 
-    modifier isRegisteredAirline() {
-        FlightSuretyDataTypes.AirlineData memory data = dataContract.getAirlineData(msg.sender);
+    modifier isRegisteredAirline(address airline) {
+        DataTypes.AirlineData memory data = dataContract.getAirlineData(airline);
 
         require(bytes(data.name).length > 0, "Caller is not a registered airline");
 
         _;
     }
 
-    modifier airlineIsNotRegistered(address _account) {
-        FlightSuretyDataTypes.AirlineData memory data = dataContract.getAirlineData(_account);
+    modifier isNotRegisteredAirline(address _account) {
+        DataTypes.AirlineData memory data = dataContract.getAirlineData(_account);
 
         require(bytes(data.name).length == 0, "Airline is already registered");
+
+        _;
+    }
+
+    modifier insuranceAmountIsBelowThreshold() {
+        require(msg.value <= MAX_INSURANCE_AMOUNT_IN_WEI, "Max insurance amount is 1 ETH");
+        _;
+    }
+
+    modifier requireRegisteredFlight(string memory _flightCode) {
+        DataTypes.FlightData memory data = dataContract.getFlightData(_flightCode);
+
+        require(data.airline != address(0), "Flight is not registered");
+
+        _;
+    }
+
+    modifier requireNotRegisteredFlight(string memory _flightCode) {
+        DataTypes.FlightData memory data = dataContract.getFlightData(_flightCode);
+
+        require(data.airline == address(0), "Flight is already registered");
 
         _;
     }
@@ -145,9 +185,9 @@ contract FlightSuretyApp {
         return false;
     }
 
-    function hasConsensus(uint votesNum, uint totalNum) private pure returns (bool) {
+    function hasConsensus(uint256 votesNum, uint256 totalNum) private pure returns (bool) {
         // prevents below 1 result in following calculation
-        uint multiplier = 10;
+        uint256 multiplier = 10;
 
         return votesNum.mul(multiplier).div(totalNum) >= 5;
     }
@@ -156,13 +196,9 @@ contract FlightSuretyApp {
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
-    function fundAirline(
-        int _funding
-    )
-        external
-        isRegisteredAirline
+    function fundAirline() external payable isRegisteredAirline(msg.sender)
     {
-        dataContract.updateAirlineFunding(msg.sender, _funding);
+        dataContract.updateAirlineFunding(msg.sender, msg.value);
     }
 
    /**
@@ -176,9 +212,9 @@ contract FlightSuretyApp {
         external
         requireOperational
         callerAirlineCanParticipate
-        airlineIsNotRegistered(newAirlineAccount)
+        isNotRegisteredAirline(newAirlineAccount)
     {
-        uint totalAirlinesCount = dataContract.getAirlinesCount();
+        uint256 totalAirlinesCount = dataContract.getAirlinesCount();
 
         if (totalAirlinesCount < MIN_NO_VOTE_AIRLINES_NUM ) {
             dataContract.addAirline(newAirlineAccount, newAirlineName);
@@ -191,7 +227,7 @@ contract FlightSuretyApp {
 
         votes.push(msg.sender);
 
-        uint totalVotesCount = votes.length;
+        uint256 totalVotesCount = votes.length;
 
         if (!hasConsensus(totalVotesCount, totalAirlinesCount)) {
             return;
@@ -200,17 +236,50 @@ contract FlightSuretyApp {
         dataContract.addAirline(newAirlineAccount, newAirlineName);
     }
 
+    function buyInsurance(
+        string memory flightCode
+    )
+        external
+        payable
+        requireOperational
+        requireRegisteredFlight(flightCode)
+        insuranceAmountIsBelowThreshold
+    {
+        dataContract.addFlightInsurance(msg.sender, flightCode, msg.value);
+    }
+
+    function withdrawInsuranceRefund(
+        string memory flightCode
+    )
+        external
+        requireOperational
+        requireRegisteredFlight(flightCode)
+    {
+        DataTypes.FlightInsuranceData memory insuranceData = dataContract.getFlightInsuranceData(
+            msg.sender,
+            flightCode
+        );
+
+        require (insuranceData.refundAmount > 0, "No refund has been issued yet");
+
+        dataContract.setFlightInsuranceRefundAmount(msg.sender, flightCode, 0);
+        (bool success, ) = msg.sender.call{value: insuranceData.refundAmount}("");
+        require(success, "Refund withdrawal failed");
+    }
+
    /**
     * @dev Register a future flight for insuring.
     *
     */
-    function registerFlight
-                                (
-                                )
-                                external
-                                pure
+    function registerFlight(
+        string memory flightCode
+    )
+        external
+        requireOperational
+        isRegisteredAirline(msg.sender)
+        requireNotRegisteredFlight(flightCode)
     {
-
+        dataContract.addFlight(msg.sender, flightCode, STATUS_CODE_UNKNOWN);
     }
 
    /**
@@ -423,6 +492,10 @@ contract FlightSuretyApp {
         }
 
         return random;
+    }
+
+    receive() external payable {
+        // require(msg.data.length == 0, "Message data should be empty");
     }
 
 // endregion
