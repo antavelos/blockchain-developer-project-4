@@ -21,7 +21,7 @@ contract FlightSuretyData {
 
     struct AirlineData {
         string name;
-        uint funding;
+        bool hasFunded;
     }
     mapping(address => AirlineData) private airlines;
     address[] private airlineAccounts;
@@ -31,7 +31,8 @@ contract FlightSuretyData {
         uint256 amount;
         uint256 refundAmount;
     }
-    mapping(address => mapping(string => FlightInsuranceData)) private insurances;
+    mapping(string => mapping(address => FlightInsuranceData)) private insurances;
+    mapping(string => address[]) private insuredPassengers;
 
     struct FlightData {
         // bool isRegistered;
@@ -40,6 +41,7 @@ contract FlightSuretyData {
         address airline;
     }
     mapping(string => FlightData) private flights;
+    string[] private flightCodes;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
@@ -126,6 +128,10 @@ contract FlightSuretyData {
         return airlines[_account];
     }
 
+    function getAirlineAccounts() external view requireAuthorizedCaller returns (address[] memory) {
+        return airlineAccounts;
+    }
+
     function getAirlineNames()
         external
         view
@@ -144,14 +150,13 @@ contract FlightSuretyData {
         return airlineAccounts.length;
     }
 
-    function updateAirlineFunding(
-        address _airlineAccount,
-        uint _funding
+    function setAirlineFunded(
+        address airlineAccount
     )
         external
         requireAuthorizedCaller
     {
-        airlines[_airlineAccount].funding = airlines[_airlineAccount].funding + _funding;
+        airlines[airlineAccount].hasFunded = true;
     }
 
     function addFlight(
@@ -167,6 +172,22 @@ contract FlightSuretyData {
             updatedTimestamp: block.timestamp,
             airline: airline
         });
+        flightCodes.push(flightCode);
+    }
+
+    function updateFlight(
+        string memory flightCode,
+        uint8 statusCode
+    )
+        external
+        requireAuthorizedCaller
+    {
+        flights[flightCode].statusCode = statusCode;
+        flights[flightCode].updatedTimestamp = block.timestamp;
+    }
+
+    function getFlightCodes() external view requireAuthorizedCaller returns (string[] memory) {
+        return flightCodes;
     }
 
     function getFlightData(
@@ -191,10 +212,11 @@ contract FlightSuretyData {
         external
         requireAuthorizedCaller
     {
-        insurances[passenger][flightCode] = FlightInsuranceData({
+        insurances[flightCode][passenger] = FlightInsuranceData({
             amount: amount,
             refundAmount: 0
         });
+        insuredPassengers[flightCode].push(passenger);
     }
 
     function getFlightInsuranceData(
@@ -207,7 +229,21 @@ contract FlightSuretyData {
 
         returns (FlightInsuranceData memory)
     {
-        return insurances[passenger][flightCode];
+        return insurances[flightCode][passenger];
+    }
+
+    function getInsuredPassengers(
+        string memory flightCode
+    )
+        external
+        view
+        requireAuthorizedCaller
+
+        returns (
+            address[] memory
+        )
+    {
+        return insuredPassengers[flightCode];
     }
 
     function setFlightInsuranceRefundAmount(
@@ -218,7 +254,7 @@ contract FlightSuretyData {
         external
         requireAuthorizedCaller
     {
-        insurances[passenger][flightCode].refundAmount = refundAmount;
+        insurances[flightCode][passenger].refundAmount = refundAmount;
     }
 
    /**

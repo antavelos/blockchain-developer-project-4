@@ -14,10 +14,10 @@ module.exports = async (deployer) => {
     await deployer.deploy(FlightSuretyApp, FlightSuretyData.address);
 
     const config = {
-      localhost: {
-        url: 'http://localhost:8545',
-        dataAddress: FlightSuretyData.address,
-        appAddress: FlightSuretyApp.address
+      provider: 'http://localhost:8545',
+      contracts: {
+        data: FlightSuretyData.address,
+        app: FlightSuretyApp.address
       }
     };
 

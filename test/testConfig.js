@@ -1,11 +1,10 @@
 
 var FlightSuretyApp = artifacts.require("FlightSuretyApp");
 var FlightSuretyData = artifacts.require("FlightSuretyData");
-var BigNumber = require('bignumber.js');
+var utils = require('../src/utils.js');
 
-const randomStr = () => Math.random().toString(16).substring(2, 8).toUpperCase();
 
-const Config = async function(accounts) {
+const init = async function(accounts) {
 
     // These test addresses are useful when you need to add
     // multiple users in test scripts
@@ -21,28 +20,31 @@ const Config = async function(accounts) {
         "0x2f2899d6d35b1a48a4fbdc93a37a72f264a9fca7"
     ];
 
+    const testAccounts = accounts.slice(50);
     const owner = accounts[0];
-    const airlines = accounts.slice(1, 7).map((acc) => {
+    const airlines = testAccounts.slice(1, 7).map((acc) => {
         return {
             account: acc,
-            name: `Airline - ${randomStr()}`
+            name: `Airline - ${utils.randomStr(6)}`
         };
     });
-    const passenger = accounts[20];
+    const oracles = testAccounts.slice(20, 40);
+    const passenger = testAccounts[20];
 
     const flightSuretyData = await FlightSuretyData.new(airlines[0].account, airlines[0].name);
     const flightSuretyApp = await FlightSuretyApp.new(flightSuretyData.address);
 
     return {
-        owner: owner,
-        airlines: airlines,
-        passenger: passenger,
-        testAddresses: testAddresses,
-        flightSuretyData: flightSuretyData,
-        flightSuretyApp: flightSuretyApp
+        owner,
+        airlines,
+        oracles,
+        passenger,
+        testAddresses,
+        flightSuretyData,
+        flightSuretyApp,
     }
 }
 
 module.exports = {
-    Config: Config
+    init: init
 };

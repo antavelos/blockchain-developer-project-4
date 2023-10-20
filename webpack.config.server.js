@@ -4,7 +4,6 @@ const { RunScriptWebpackPlugin } = require('run-script-webpack-plugin');
 
 module.exports = {
     entry: "./src/server/index",
-    watch: true,
     externalsPresets: {
         node: true
     },
@@ -23,7 +22,7 @@ module.exports = {
     plugins: [
         new RunScriptWebpackPlugin({
             name: 'server.js',
-          }),
+        }),
     ],
     output: {
         path: path.join(__dirname, 'prod/server'),
