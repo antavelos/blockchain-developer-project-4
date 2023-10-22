@@ -6,21 +6,15 @@ import Web3 from 'web3';
 import express from 'express';
 
 const ORACLE_REGISTRATION_FEE = utils.ethToWei(1);
-const STATUS_CODE_UNKNOWN = 0;
-const STATUS_CODE_ON_TIME = 10;
-const STATUS_CODE_LATE_AIRLINE = 20;
-const STATUS_CODE_LATE_WEATHER = 30;
-const STATUS_CODE_LATE_TECHNICAL = 40;
-const STATUS_CODE_LATE_OTHER = 50;
 
-const statusCodes = [
-  STATUS_CODE_UNKNOWN,
-  STATUS_CODE_ON_TIME,
-  STATUS_CODE_LATE_AIRLINE,
-  STATUS_CODE_LATE_WEATHER,
-  STATUS_CODE_LATE_TECHNICAL,
-  STATUS_CODE_LATE_OTHER
-];
+const statusCodes = {
+  // STATUS_CODE_UNKNOWN: 0,
+  STATUS_CODE_ON_TIME: 10,
+  STATUS_CODE_LATE_AIRLINE: 20,
+  STATUS_CODE_LATE_WEATHER: 30,
+  STATUS_CODE_LATE_TECHNICAL: 40,
+  STATUS_CODE_LATE_OTHER: 50,
+};
 
 let web3 = new Web3(new Web3.providers.WebsocketProvider(config.provider.replace('http', 'ws')));
 // web3.eth.defaultAccount = web3.eth.accounts[0];
@@ -49,7 +43,6 @@ async function initContracts() {
   flightSuretyApp = new web3.eth.Contract(FlightSuretyApp.abi, config.contracts.app);
   flightSuretyData = new web3.eth.Contract(FlightSuretyData.abi, config.contracts.data);
 
-  await flightSuretyData.methods.authorizeCaller(owner).send({from: owner});
   await flightSuretyData.methods.authorizeCaller(config.contracts.app).send({from: owner});
 }
 
@@ -59,7 +52,14 @@ async function initEvents() {
     for (let i = 0; i < oracleAccounts.length; i++) {
       let indexes = await flightSuretyApp.methods.getMyIndexes().call({from: oracleAccounts[i]});
       if (indexes.includes(event.returnValues.oracleIndex)) {
-        const statusCode = statusCodes[utils.randomInt(statusCodes.length)];
+        let statusCode;
+        if (utils.randomInt(10) < 4) {
+          statusCode = statusCodes.STATUS_CODE_LATE_AIRLINE;
+        } else {
+          const statusCodesValues = Object.values(statusCodes);
+          const randIdx = utils.randomInt(statusCodesValues.length)
+         statusCode = statusCodesValues[randIdx];
+        }
 
         try {
           await flightSuretyApp.methods.updateFlightStatus(
@@ -89,7 +89,7 @@ async function initEvents() {
 
 async function initAirlines() {
   const fund = async (airlineAccount) => {
-    const data = await flightSuretyData.methods.getAirlineData(airlineAccount).call({from: owner});
+    const data = await flightSuretyApp.methods.getAirlineData(airlineAccount).call({from: owner});
     if (!data.hasFunded) {
       console.log(`\Airline '${data.name}' initial fund: 10 ETH`);
       await flightSuretyApp.methods.fundAirline().send({from: airlineAccount, value: utils.ethToWei(10)});
@@ -97,7 +97,7 @@ async function initAirlines() {
   }
 
   const register = async (airlineAccount, fromAirline) => {
-    const airlineName = `AIR${utils.randomStr(4)}`;
+    const airlineName = `AIR-${utils.randomStr(4)}`;
     const msg = `Airline ${airlineAccount}`;
     try {
       await flightSuretyApp.methods.registerAirline(
@@ -131,11 +131,11 @@ async function initAirlines() {
   await register(airlineAccounts[4], airlineAccounts[1]);
 
   console.log("\nRegistered airline names:");
-  console.log(await flightSuretyData.methods.getAirlineNames().call({from: owner}))
+  console.log(await flightSuretyApp.methods.getAirlineNames().call({from: owner}))
 };
 
 async function initFlights() {
-  const flightCodes = await flightSuretyData.methods.getFlightCodes().call({from: owner});
+  const flightCodes = await flightSuretyApp.methods.getFlightCodes().call({from: owner});
   if (flightCodes.length === 0) {
     console.log("\nRegistering flights\n");
 
@@ -162,7 +162,7 @@ async function initFlights() {
     }
   }
   console.log("\nRegistered flight codes:");
-  console.log(await flightSuretyData.methods.getFlightCodes().call({from: owner}));
+  console.log(await flightSuretyApp.methods.getFlightCodes().call({from: owner}));
 }
 
 async function init() {
@@ -171,7 +171,6 @@ async function init() {
   await initFlights();
   await initOracles();
   await initEvents();
-
 };
 
 async function initOracles() {
@@ -190,12 +189,6 @@ async function initOracles() {
   }
 };
 
-async function fetchFlightStatus() {
-  const timestamp = utils.now();
-
-  await flightSuretyApp.methods.fetchFlightStatus(flightCode, timestamp).call()
-};
-
 const app = express();
 app.get('/api', async (req, res) => {
   res.send({
@@ -206,10 +199,16 @@ app.get('/fetch', async (req, res) => {
   const flightCode = req.query.flightCode;
   const timestamp = utils.now();
 
-  await flightSuretyApp.methods.fetchFlightStatus(flightCode, timestamp).send({from: owner, gas: 1000000});
-
-  res.send({
-    message: "Request submited",
-  });
+  flightSuretyApp.methods.fetchFlightStatus(flightCode, timestamp).send({from: owner, gas: 1000000})
+  .then(() => {
+    res.send({
+      message: "Request submited",
+    });
+  })
+  .catch(err => {
+    res.send({
+      message: utils.cleanError(err),
+    });
+  })
 });
 export default app;

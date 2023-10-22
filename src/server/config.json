@@ -1,7 +1,7 @@
 {
 	"provider": "http://localhost:8545",
 	"contracts": {
-		"data": "0x1FfB262F61DB3E918fCA4bD3e60c75e4b9a0D3D4",
-		"app": "0xf477fC27f5Ff1Ccb5fcC75cf3f7E10C8899797E6"
+		"data": "0x778D2d22f77FEcF9905B73E06bcB03cF89F5C219",
+		"app": "0x2a2ae591dec82BA18cd9C42a60F4112c225CE513"
 	}
 }

@@ -6,6 +6,7 @@ pragma abicoder v2;
 // TODO: sort function per visibility
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./DataTypes.sol";
 
 contract FlightSuretyData {
     using SafeMath for uint256;
@@ -19,28 +20,26 @@ contract FlightSuretyData {
 
     mapping(address => bool) private authorizedCallers;
 
-    struct AirlineData {
-        string name;
-        bool hasFunded;
-    }
-    mapping(address => AirlineData) private airlines;
+    // struct DataTypes.AirlineData {
+    //     string name;
+    //     bool hasFunded;
+    // }
+    mapping(address => DataTypes.AirlineData) private airlines;
     address[] private airlineAccounts;
 
-    struct FlightInsuranceData {
-        // bytes32 flightCode;
-        uint256 amount;
-        uint256 refundAmount;
-    }
-    mapping(string => mapping(address => FlightInsuranceData)) private insurances;
+    // struct DataTypes.FlightInsuranceData {
+    //     uint256 amount;
+    //     uint256 refundAmount;
+    // }
+    mapping(string => mapping(address => DataTypes.FlightInsuranceData)) private insurances;
     mapping(string => address[]) private insuredPassengers;
 
-    struct FlightData {
-        // bool isRegistered;
-        uint8 statusCode;
-        uint256 updatedTimestamp;
-        address airline;
-    }
-    mapping(string => FlightData) private flights;
+    // struct DataTypes.FlightData {
+    //     uint8 statusCode;
+    //     uint256 updatedTimestamp;
+    //     address airline;
+    // }
+    mapping(string => DataTypes.FlightData) private flights;
     string[] private flightCodes;
 
     /********************************************************************************************/
@@ -122,7 +121,7 @@ contract FlightSuretyData {
         view
         requireAuthorizedCaller
         returns (
-            AirlineData memory
+            DataTypes.AirlineData memory
         )
     {
         return airlines[_account];
@@ -161,28 +160,28 @@ contract FlightSuretyData {
 
     function addFlight(
         address airline,
-        string memory flightCode,
-        uint8 statusCode
+        string memory flightCode
     )
         external
         requireAuthorizedCaller
     {
-        flights[flightCode] = FlightData({
-            statusCode: statusCode,
-            updatedTimestamp: block.timestamp,
-            airline: airline
-        });
+        DataTypes.FlightData storage data = flights[flightCode];
+        data.updatedTimestamp = block.timestamp;
+        data.airline = airline;
+
         flightCodes.push(flightCode);
     }
 
     function updateFlight(
         string memory flightCode,
-        uint8 statusCode
+        uint8 statusCode,
+        bool statusCodeVerified
     )
         external
         requireAuthorizedCaller
     {
         flights[flightCode].statusCode = statusCode;
+        flights[flightCode].statusCodeVerified = statusCodeVerified;
         flights[flightCode].updatedTimestamp = block.timestamp;
     }
 
@@ -198,7 +197,7 @@ contract FlightSuretyData {
         requireAuthorizedCaller
 
         returns (
-            FlightData memory
+            DataTypes.FlightData memory
         )
     {
         return flights[flightCode];
@@ -212,9 +211,10 @@ contract FlightSuretyData {
         external
         requireAuthorizedCaller
     {
-        insurances[flightCode][passenger] = FlightInsuranceData({
+        insurances[flightCode][passenger] = DataTypes.FlightInsuranceData({
             amount: amount,
-            refundAmount: 0
+            refundAmount: 0,
+            refundWithdrawn: false
         });
         insuredPassengers[flightCode].push(passenger);
     }
@@ -227,7 +227,7 @@ contract FlightSuretyData {
         view
         requireAuthorizedCaller
 
-        returns (FlightInsuranceData memory)
+        returns (DataTypes.FlightInsuranceData memory)
     {
         return insurances[flightCode][passenger];
     }
@@ -246,16 +246,26 @@ contract FlightSuretyData {
         return insuredPassengers[flightCode];
     }
 
-    function setFlightInsuranceRefundAmount(
+    function updateFlightInsuranceData(
         address passenger,
         string memory flightCode,
-        uint256 refundAmount
+        DataTypes.FlightInsuranceData memory data
     )
         external
         requireAuthorizedCaller
     {
-        insurances[flightCode][passenger].refundAmount = refundAmount;
+        insurances[flightCode][passenger] = data;
     }
+    // function setFlightInsuranceRefundAmount(
+    //     address passenger,
+    //     string memory flightCode,
+    //     uint256 refundAmount
+    // )
+    //     external
+    //     requireAuthorizedCaller
+    // {
+    //     insurances[flightCode][passenger].refundAmount = refundAmount;
+    // }
 
    /**
     * @dev Buy insurance for a flight

@@ -7,6 +7,8 @@
     <title>FlightSurety</title>
     <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css" integrity="sha256-XoaMnoYC5TH6/+ihMEnospgm0J1PM/nioxbOUdnM8HY=" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     <link rel="icon" type="image/x-icon" href="./images/favicon.ico">
@@ -19,40 +21,227 @@
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarScroll" aria-controls="navbarScroll" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
+        <div class="collapse navbar-collapse" id="navbarScroll">
+          <ul class="navbar-nav me-auto my-2 my-lg-0 navbar-nav-scroll" style="--bs-scroll-height: 100px;">
+            <li class="nav-item dropdown" id="airlineActionsDropdown">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Actions
+              </a>
+              <ul class="dropdown-menu">
+                <li><a id="registerAirlineButton" class="dropdown-item" href="#"><i class="bi bi-building-fill me-2"></i>Register new airline</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a id="registerFlightButton" class="dropdown-item" href="#"><i class="bi bi-airplane-fill me-2"></i>Register new flight</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a id="fundAirlineButton" class="dropdown-item" href="#"><i class="fa fa-ethereum me-2" aria-hidden="true"></i>
+                  Fund</a></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
       </div>
     </nav>
-    <dev class="container-fluid">
-      <div class="row ">
+    <dev class="container">
+      <div class="row">
         <div class="col-3"></div>
-        <div class="col-6 my-container">
+        <div class="col-6">
           <div class="input-group">
-            <input id="flight-number" type="text" class="form-control" placeholder="Flight numbder">
-            <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
+            <input id="flight-number" type="search" class="form-control" placeholder="Filter flights by flight code">
+            <!-- <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn> -->
+          </div>
+          <div class="my-list overflow-auto mt-2 ">
+            <div id="flights-list" class="list-group">
+            </div>
           </div>
         </div>
         <!-- <div class="col-3"></div> -->
       </div>
     </dev>
 
+    <!-- Buy insurance modal -->
+    <div class="modal fade" id="buyInsuranceModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="buyInsuranceModal" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="buyInsuranceModal">Flight Delay Insurance</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div>
+              <p style="text-align: center;"><strong>
+                Protect your travel plans with our Flight Delay Insurance,
+                ensuring peace of mind and compensation for unexpected delays,
+                so you can fly worry-free!
+              </strong></p>
+            </div>
+            <hr class="divider">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Flight</span>
+              <input id="buyInsuranceFlightCode" type="text" class="form-control" disabled>
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Price</span>
+              <input id="buyInsurancePrice" type="number" class="form-control" placeholder="i.e. 1">
+              <span class="input-group-text">ETH</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="buyInsuranceConfirmButton" type="button" class="btn btn-outline-primary">Buy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fund airline modal -->
+    <div class="modal fade" id="fundAirlineModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="fundAirlineModal" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="fundAirlineModal">Fund</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Amount</span>
+              <input id="fundAirlineAmount" type="number" class="form-control" placeholder="i.e. 10" min="10">
+              <span class="input-group-text">ETH</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="fundAirlineConfirmButton" type="button" class="btn btn-outline-primary">Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Register airline modal -->
+    <div class="modal fade" id="registerAirlineModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="registerAirlineModal" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="registerAirlineModal">New Airline</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Name</span>
+              <input id="registerAirlineName" type="text" class="form-control">
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Address</span>
+              <input id="registerAirlineAddress" type="text" class="form-control">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="registerAirlineConfirmButton" type="button" class="btn btn-outline-primary">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Register flight modal -->
+    <div class="modal fade" id="registerFlightModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="registerFlightModal" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="registerFlightModal">New Flight</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Flight code</span>
+              <input id="registerFlightCode" type="text" class="form-control">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="registerFlightConfirmButton" type="button" class="btn btn-outline-primary">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success toast  -->
+    <div class="toast-container position-fixed top-0 start-50 translate-middle-x p-3">
+      <div id="successToast" class="toast text-bg-success" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+          <strong class="me-auto">Success</strong>
+          <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div id="successToastBody" class="toast-body">
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Info toast  -->
+    <div class="toast-container position-fixed top-0 start-50 translate-middle-x p-3">
+      <div id="infoToast" class="toast text-bg-info" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+          <strong class="me-auto">Information</strong>
+          <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div id="infoToastBody" class="toast-body">
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Error toast  -->
+    <div class="toast-container position-fixed top-0 start-50 translate-middle-x p-3">
+      <div id="errorToast" class="toast text-bg-danger" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+          <strong class="me-auto">Error</strong>
+          <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div id="errorToastBody" class="toast-body">
+
+        </div>
+      </div>
+    </div>
+    <script>
+
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    </script>
     <script src="index.js"></script>
 
     <style>
       body {
         background-image: url('./images/flight.jpg'); /* Source: iStockPhoto */
+        font-family: 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif';
         background-repeat: no-repeat;
         background-size: cover;
-        height: vh;
+        height: 100%;
+        width: 100%;
         position: relative;
-    }
+        right: 15px;
+      }
+      .tooltip-inner {
+        max-width: 400px;
+      }
+      nav {
+        right: -15px;
+      }
 
-    .my-container {
-        margin-top: 400px;
-        background-color: #000;
-        opacity: 0.9;
-        color: #fff;
-        padding: 40px;
-        border-radius: 5px;
-    }
+      .my-list {
+        height: 85vh;
+        opacity: .85;
+      }
+
+      #flight-number {
+        opacity: .8;
+      }
+
+      .insurance-button {
+        float: right;
+      }
+
+      button, input, .input-group, .list-group-item {
+        border-radius: 0! important;
+      }
+
     </style>
   </body>
 </html>

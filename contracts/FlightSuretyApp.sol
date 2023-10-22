@@ -8,27 +8,7 @@ pragma abicoder v2;
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
-
-// TODO: move to common library contract
-library DataTypes {
-    struct AirlineData {
-        string name;
-        bool hasFunded;
-    }
-
-    struct FlightInsuranceData {
-        // bytes32 flightCode;
-        uint256 amount;
-        uint256 refundAmount;
-    }
-
-    struct FlightData {
-        // bool isRegistered;
-        uint8 statusCode;
-        uint256 updatedTimestamp;
-        address airline;
-    }
-}
+import "./DataTypes.sol";
 
 contract IFlightSuretyData {
     function addAirline(address, string memory) external { }
@@ -37,15 +17,14 @@ contract IFlightSuretyData {
     function getAirlineAccounts() external view returns (address[] memory) { }
     function getAirlinesCount() external view returns (uint) { }
     function setAirlineFunded(address) external { }
-    function addFlight(address, string memory, uint8) external { }
-    function updateFlight(string memory, uint8) external { }
+    function addFlight(address, string memory) external { }
+    function updateFlight(string memory, uint8, bool) external { }
     function getFlightData(string memory) external view returns (DataTypes.FlightData memory) { }
     function getFlightCodes() external view returns (string[] memory) { }
     function addFlightInsurance(address, string memory, uint256) external { }
-    function updateFlightInsurance(string memory, uint256) external { }
     function getFlightInsuranceData(address, string memory) external view returns (DataTypes.FlightInsuranceData memory) { }
+    function updateFlightInsuranceData(address, string memory, DataTypes.FlightInsuranceData memory) external { }
     function getInsuredPassengers(string memory) external view returns (address[] memory) { }
-    function setFlightInsuranceRefundAmount(address, string memory, uint256) external { }
 }
 
 contract FlightSuretyApp {
@@ -125,7 +104,7 @@ contract FlightSuretyApp {
     // they fetch data and submit a response
     event FlightStatusRequested(uint8 oracleIndex, address airline, string flightCode, uint256 timestamp);
 
-    event FlightInsuranceRefundCredited(address passenger, string flightCode);
+    event FlightInsuranceRefundCredited(address passenger, string flightCode, uint256 refundAmount);
 
     // TODO: remove
     event Debug(string text);
@@ -232,6 +211,14 @@ contract FlightSuretyApp {
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
+    function getAirlineNames() external view requireOperational returns (string[] memory){
+        return dataContract.getAirlineNames();
+    }
+
+    function getAirlineData(address airlineAccount) external view requireOperational returns (DataTypes.AirlineData memory){
+        return dataContract.getAirlineData(airlineAccount);
+    }
+
     function fundAirline() external payable isRegisteredAirline(msg.sender)
     {
         require(msg.value >= MIN_AIRLINE_FUND, "Not sufficient funding amount");
@@ -277,6 +264,19 @@ contract FlightSuretyApp {
         dataContract.addAirline(newAirlineAccount, newAirlineName);
     }
 
+    function getFlightInsuranceData(
+        address passenger,
+        string memory flightCode
+    )
+        external
+        view
+        requireOperational
+
+        returns (DataTypes.FlightInsuranceData memory)
+    {
+        return dataContract.getFlightInsuranceData(passenger, flightCode);
+    }
+
     function buyInsurance(
         string memory flightCode
     )
@@ -303,8 +303,12 @@ contract FlightSuretyApp {
 
         require (insuranceData.refundAmount > 0, "No refund has been issued yet");
 
-        dataContract.setFlightInsuranceRefundAmount(msg.sender, flightCode, 0);
-        (bool success, ) = msg.sender.call{value: insuranceData.refundAmount}("");
+        uint refundAmount = insuranceData.refundAmount;
+        insuranceData.refundAmount = 0;
+        insuranceData.refundWithdrawn = true;
+        dataContract.updateFlightInsuranceData(msg.sender, flightCode, insuranceData);
+
+        (bool success, ) = msg.sender.call{value: refundAmount}("");
         require(success, "Refund withdrawal failed");
     }
 
@@ -323,9 +327,12 @@ contract FlightSuretyApp {
         isRegisteredAirline(msg.sender)
         requireNotRegisteredFlight(flightCode)
     {
-        dataContract.addFlight(msg.sender, flightCode, STATUS_CODE_UNKNOWN);
+        dataContract.addFlight(msg.sender, flightCode);
     }
 
+    function getFlightCodes() external view requireOperational returns (string[] memory){
+        return dataContract.getFlightCodes();
+    }
    /**
     * @dev Called after oracle has updated flight status
     *
@@ -352,18 +359,21 @@ contract FlightSuretyApp {
                 flightCode
             );
 
-            uint256 refundAmount = calculateRefundAmount(insuranceData.amount);
+            insuranceData.refundAmount = calculateRefundAmount(insuranceData.amount);
 
-            dataContract.setFlightInsuranceRefundAmount(
+            dataContract.updateFlightInsuranceData(
                 insuredPassengers[i],
                 flightCode,
-                refundAmount
+                insuranceData
             );
 
-            emit FlightInsuranceRefundCredited(insuredPassengers[i], flightCode);
+            emit FlightInsuranceRefundCredited(insuredPassengers[i], flightCode, insuranceData.refundAmount);
         }
     }
 
+    function getFlightData(string memory flightCode) external view requireOperational returns (DataTypes.FlightData memory) {
+        return dataContract.getFlightData(flightCode);
+    }
     // Generate a request for oracles to fetch flight information
     function fetchFlightStatus(
         // address airline,
@@ -375,6 +385,8 @@ contract FlightSuretyApp {
         requireRegisteredFlight(flightCode)
     {
         DataTypes.FlightData memory flightData = dataContract.getFlightData(flightCode);
+
+        require(!flightData.statusCodeVerified, "Status code is already verified");
 
         uint8 index = getRandomIndex(msg.sender);
 
@@ -448,6 +460,7 @@ contract FlightSuretyApp {
             oracleResponses[key].isOpen = false;
             processFlightStatus(flightCode, statusCode);
         }
+        dataContract.updateFlight(flightCode, statusCode, verified);
 
         emit FlightStatusReceived(airline, flightCode, timestamp, statusCode, verified);
     }

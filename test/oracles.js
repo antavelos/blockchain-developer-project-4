@@ -8,7 +8,7 @@ contract('Oracles', async (accounts) => {
   const ORACLE_INDEXES_COUNT = 3;
 
   // Watch contract events
-  const STATUS_CODE_UNKNOWN = 0;
+  const STATUS_CODE_UNKNOWN = 1;
   const STATUS_CODE_ON_TIME = 10;
   const STATUS_CODE_LATE_AIRLINE = 20;
   const STATUS_CODE_LATE_WEATHER = 30;
@@ -176,7 +176,7 @@ contract('Oracles', async (accounts) => {
     )
   });
 
-  it('FlightSuretyApp.updateFlightStatus() should should raise relevant events', async () => {
+  it('FlightSuretyApp.updateFlightStatus() should raise relevant events', async () => {
     const airlineAccount = config.airlines[0].account;
     const flightCode = 'ND1311';
     const timestamp = utils.now();
@@ -215,6 +215,9 @@ contract('Oracles', async (accounts) => {
     assert.isFalse(events[0].returnValues.verified, "First status code should not be verified");
     assert.isFalse(events[1].returnValues.verified, "Second status code should not be verified");
     assert.isTrue(events[2].returnValues.verified, "Third status code should be verified");
+
+    const data = await config.flightSuretyData.getFlightData(flightCode);
+    assert.equal(data.statusCode, statusCode, "Status code was not updated");
   });
 
   it('FlightSuretyApp.updateFlightStatus() should refund passenger for delayed flight', async () => {

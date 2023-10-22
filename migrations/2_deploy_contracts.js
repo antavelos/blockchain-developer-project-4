@@ -8,7 +8,7 @@ const saveConfig = (config, path) => fs.writeFileSync(`${__dirname}/${path}`, JS
 module.exports = async (deployer) => {
 
     const firstAirlineAccount = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
-    const firstAirlineName = 'First';
+    const firstAirlineName = 'AIR-First';
 
     await deployer.deploy(FlightSuretyData, firstAirlineAccount, firstAirlineName);
     await deployer.deploy(FlightSuretyApp, FlightSuretyData.address);

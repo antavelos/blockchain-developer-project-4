@@ -260,21 +260,19 @@ contract('Flight Surety Tests', async (accounts) => {
 
   it('FlightSuretyData.addFlight() should fail when called from unauthorized caller', async () => {
     const flightCode = "ND1309";
-    const statusCode = 0;
     const airline = config.airlines[0].account;
 
     await utils.assertContractCallError(
-      config.flightSuretyData.addFlight(airline, flightCode, statusCode, {from: config.testAddresses[1]}),
+      config.flightSuretyData.addFlight(airline, flightCode, {from: config.testAddresses[1]}),
       "Caller is not authorized"
     )
   });
 
   it('FlightSuretyData.addFlight() should add a new flight', async () => {
     const flightCode = "ND1309";
-    const statusCode = 0;
     const airline = config.airlines[0].account;
 
-    await config.flightSuretyData.addFlight(airline, flightCode, statusCode);
+    await config.flightSuretyData.addFlight(airline, flightCode);
 
     const flight = await config.flightSuretyData.getFlightData(flightCode);
     assert.equal(flight.airline, airline, "flight insurance doesn't match");
@@ -286,23 +284,23 @@ contract('Flight Surety Tests', async (accounts) => {
     const statusCode = 1;
 
     await utils.assertContractCallError(
-      config.flightSuretyData.updateFlight(flightCode, statusCode, {from: config.testAddresses[1]}),
+      config.flightSuretyData.updateFlight(flightCode, statusCode, true, {from: config.testAddresses[1]}),
       "Caller is not authorized"
     )
   });
 
   it('FlightSuretyData.updateFlight() should update a flight', async () => {
     const flightCode = "ND9999";
-    const statusCode = 0;
     const airline = config.airlines[0].account;
 
-    await config.flightSuretyData.addFlight(airline, flightCode, statusCode);
+    await config.flightSuretyData.addFlight(airline, flightCode);
 
     const newStatusCode = 1;
-    await config.flightSuretyData.updateFlight(flightCode, newStatusCode);
+    await config.flightSuretyData.updateFlight(flightCode, newStatusCode, true);
 
     const flight = await config.flightSuretyData.getFlightData(flightCode);
     assert.equal(flight.statusCode, newStatusCode, "status code was not updated");
+    assert.isTrue(flight.statusCodeVerified, "status code was not updated");
   });
 
   it('FlightSuretyApp.registerFlight() should fail when contract is not operational', async () => {
@@ -334,7 +332,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const flightCode = "ND1309";
     const airline = config.airlines[0].account;
 
-    await config.flightSuretyData.addFlight(airline, flightCode, 0);
+    await config.flightSuretyData.addFlight(airline, flightCode);
 
     await utils.assertContractCallError(
       config.flightSuretyApp.registerFlight(flightCode, {from: airline}),
@@ -376,30 +374,48 @@ contract('Flight Surety Tests', async (accounts) => {
     assert.equal(insurance.refundAmount, 0, "insurance refund amount should be 0");
   });
 
-  it('FlightSuretyData.setFlightInsuranceRefundAmount() should fail when called from unauthorized caller', async () => {
+  it('FlightSuretyData.updateFlightInsuranceData() should fail when called from unauthorized caller', async () => {
     const flightCode = "ND1309";
-    const refundAmount = utils.ethToWei(1.5);
     const passenger = config.passenger;
 
     await utils.assertContractCallError(
-      config.flightSuretyData.setFlightInsuranceRefundAmount(passenger, flightCode, refundAmount, {from: config.testAddresses[1]}),
+      config.flightSuretyData.updateFlightInsuranceData(
+        passenger,
+        flightCode,
+        {
+          amount: utils.ethToWei(1),
+          refundAmount: utils.ethToWei(1.5),
+          refundWithdrawn: false
+        },
+        {
+          from: config.testAddresses[1]
+        }
+      ),
       "Caller is not authorized"
     )
   });
 
-  it('FlightSuretyData.setFlightInsuranceRefundAmount() should set the refund amount', async () => {
+  it('FlightSuretyData.updateFlightInsuranceData() should set the refund amount', async () => {
     const flightCode = "ND1309";
     const amount = utils.ethToWei(1);
-    const refundAmount = utils.ethToWei(1.5);
     const passenger = config.passenger;
+
+    const refundAmount = utils.ethToWei(1.5);
 
     await config.flightSuretyData.addFlightInsurance(passenger, flightCode, utils.ethToWei(1));
 
-    await config.flightSuretyData.setFlightInsuranceRefundAmount(passenger, flightCode, refundAmount);
+    const updated = {
+      amount,
+      refundAmount: utils.ethToWei(1.5),
+      refundWithdrawn: false
+    };
+
+    await config.flightSuretyData.updateFlightInsuranceData(passenger, flightCode, updated);
 
     const insurance = await config.flightSuretyData.getFlightInsuranceData(passenger, flightCode);
     assert.equal(insurance.amount, amount, "insurance amount doesn't match");
     assert.equal(insurance.refundAmount, refundAmount, "insurance refund amount doesn't match");
+    assert.isFalse(insurance.refundWithdrawn, "Refund should not have been withdrawn");
   });
 
   it('FlightSuretyApp.buyInsurance() should fail when contract is not operational', async () => {
@@ -505,7 +521,11 @@ contract('Flight Surety Tests', async (accounts) => {
     // setup
     await config.flightSuretyApp.registerFlight(flightCode, {from: config.airlines[0].account});
     await config.flightSuretyApp.buyInsurance(flightCode, {from: passenger, value: amount});
-    await config.flightSuretyData.setFlightInsuranceRefundAmount(passenger, flightCode, refundAmount)
+    await config.flightSuretyData.updateFlightInsuranceData(passenger, flightCode, {
+      amount,
+      refundAmount,
+      refundWithdrawn: false
+    })
 
     const balanceBefore = parseInt(await w3.eth.getBalance(passenger));
 
@@ -516,5 +536,6 @@ contract('Flight Surety Tests', async (accounts) => {
 
     const data = await config.flightSuretyData.getFlightInsuranceData(passenger, flightCode)
     assert.equal(data.refundAmount, 0, "Refund amount was not adjusted");
+    assert.isTrue(data.refundWithdrawn, "Refund should have been withdrawn");
   });
 });

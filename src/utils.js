@@ -43,7 +43,10 @@ const cleanError = (error) => {
   const msg = "Error: Returned error: VM Exception while processing transaction: revert";
   return error.toString().replace(msg, "");
 }
+
 const randomInt = (upTo) => Math.floor(Math.random() * upTo);
+
+const shortenAddress = (address) => `${address.substr(0, 5)}...${address.substr(-3)}`;
 
 module.exports = {
     assertErrorReason,
@@ -53,4 +56,5 @@ module.exports = {
     cleanError,
     ethToWei,
     now,
+    shortenAddress,
 };

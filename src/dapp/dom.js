@@ -15,19 +15,27 @@ export default class DOM {
     static span = (...args) => DOM.makeElement(`span`, ...args);
     static img = (...args) => DOM.makeElement(`img`, ...args);
     static td = (...args) => DOM.makeElement(`td`, ...args);
+    static strong = (...args) => DOM.makeElement(`strong`, ...args);
+    static small = (...args) => DOM.makeElement(`small`, ...args);
+    static i = (...args) => DOM.makeElement(`i`, ...args);
+    static code = (...args) => DOM.makeElement(`code`, ...args);
     static attributeExceptions = [
       `role`,
     ];
-    
-    static elid(id) { 
+
+    static elid(id) {
       return document.getElementById(id);
     }
-  
+
+    static text(_text) {
+      return document.createTextNode(_text)
+    }
+
     static appendText(el, text) {
       const textNode = document.createTextNode(text);
       el.appendChild(textNode);
     }
-    
+
     static appendArray(el, children) {
       children.forEach((child) => {
         if (Array.isArray(child)) {
@@ -39,13 +47,13 @@ export default class DOM {
         }
       });
     }
-    
+
     static setStyles(el, styles) {
       if (!styles) {
         el.removeAttribute(`styles`);
         return;
       }
-    
+
       Object.keys(styles).forEach((styleName) => {
         if (styleName in el.style) {
           el.style[styleName] = styles[styleName]; // eslint-disable-line no-param-reassign
@@ -54,13 +62,13 @@ export default class DOM {
         }
       });
     }
-    
+
     static makeElement(type, textOrPropsOrChild, ...otherChildren) {
       const el = document.createElement(type);
-    
+
       if (Array.isArray(textOrPropsOrChild)) {
         DOM.appendArray(el, textOrPropsOrChild);
-      } else if (textOrPropsOrChild instanceof window.Element) { 
+      } else if (textOrPropsOrChild instanceof window.Element) {
         el.appendChild(textOrPropsOrChild);
       } else if (typeof textOrPropsOrChild === `string`) {
         DOM.appendText(el, textOrPropsOrChild);
@@ -68,7 +76,7 @@ export default class DOM {
         Object.keys(textOrPropsOrChild).forEach((propName) => {
           if (propName in el || attributeExceptions.includes(propName)) {
             const value = textOrPropsOrChild[propName];
-    
+
             if (propName === `style`) {
               DOM.setStyles(el, value);
             } else if (value) {
@@ -79,10 +87,9 @@ export default class DOM {
           }
         });
       }
-    
+
       if (otherChildren) DOM.appendArray(el, otherChildren);
-    
+
       return el;
     }
   }
-    
