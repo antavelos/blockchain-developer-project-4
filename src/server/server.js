@@ -7,8 +7,13 @@ import express from 'express';
 
 const ORACLE_REGISTRATION_FEE = utils.ethToWei(1);
 
+const cleanError = (error) => {
+  const msg = "Error: Returned error: VM Exception while processing transaction: revert";
+  return error.toString().replace(msg, "");
+}
+
 const statusCodes = {
-  // STATUS_CODE_UNKNOWN: 0,
+  STATUS_CODE_UNKNOWN: 0,
   STATUS_CODE_ON_TIME: 10,
   STATUS_CODE_LATE_AIRLINE: 20,
   STATUS_CODE_LATE_WEATHER: 30,
@@ -71,7 +76,7 @@ async function initEvents() {
             .send({from: oracleAccounts[i], gas: 1000000});
           console.log(`Oracle ${i} (${indexes}) sent: ${statusCode}`)
         } catch(err) {
-          console.log(`Oracle ${i} error: ${utils.cleanError(err)}`);
+          console.log(`Oracle ${i} error: ${cleanError(err)}`);
         }
       }
     }
@@ -106,7 +111,7 @@ async function initAirlines() {
       ).send({from: fromAirline, gas: 1000000});
       console.log(`${msg}: [OK]`)
     } catch(err) {
-      console.log(`${msg}: [NOK]: ${utils.cleanError(err)}`);
+      console.log(`${msg}: [NOK]: ${cleanError(err)}`);
     }
   }
 
@@ -146,7 +151,7 @@ async function initFlights() {
         await flightSuretyApp.methods.registerFlight(flightCode).send({from: airlineAccount, gas: 1000000});
         console.log(`${msg}: [OK]`);
       } catch(err) {
-        console.log(`${msg}: [NOK]: ${utils.cleanError(err)}`);
+        console.log(`${msg}: [NOK]: ${cleanError(err)}`);
         success = false;
       }
       return success;
@@ -184,7 +189,7 @@ async function initOracles() {
       await flightSuretyApp.methods.registerOracle().send({from: oracleAccount, value: ORACLE_REGISTRATION_FEE, gas: 1000000});
       console.log(`${msg}: [OK]`)
     } catch(err) {
-      console.log(`${msg}: [NOK]: ${utils.cleanError(err)}`);
+      console.log(`${msg}: [NOK]: ${cleanError(err)}`);
     }
   }
 };
@@ -207,7 +212,22 @@ app.get('/fetch', async (req, res) => {
   })
   .catch(err => {
     res.send({
-      message: utils.cleanError(err),
+      message: cleanError(err),
+    });
+  })
+});
+app.get('/operational', async (req, res) => {
+  const flag = Boolean((parseInt(req.query.flag)));
+
+  flightSuretyApp.methods.setOperatingStatus(flag).send({from: owner, gas: 1000000})
+  .then(() => {
+    res.send({
+      message: `Operation set to ${flag}`,
+    });
+  })
+  .catch(err => {
+    res.send({
+      message: cleanError(err),
     });
   })
 });

@@ -1,57 +1,30 @@
 import config from './config.json';
+import Contract from './contract';
+import UI from './ui';
 import * as utils from '../utils.js';
 import DOM from './dom';
-import FlightSuretyApp from '../../build/contracts/FlightSuretyApp.json';
-import FlightSuretyData from '../../build/contracts/FlightSuretyData.json';
 import Web3 from "web3";
 import moment from "moment";
 
-const parseError = err => {
-  try {
-    const msg = err.message.split('message')[1].split('code')[0].slice(3).slice(0, -3);
-    return msg.replace("VM Exception while processing transaction: revert", "");
-  } catch {
-    return err.message;
-  }
-};
+window.addEventListener("load", async () => {
+  App.metamask = window.ethereum;
+
+  const web3 = App.metamask
+    ? new Web3(window.ethereum)
+    : new Web3(new Web3.providers.WebsocketProvider(config.provider.replace('http', 'ws')));
+
+  await App.start(web3);
+});
 
 const App = {
-  web3: null,
+  metamask: null,
+  ui: null,
+  contract: null,
   currentAccount: null,
-  meta: null,
-  flightSuretyApp: null,
-  flightSuretyData: null,
   flightsListEl: DOM.elid("flights-list"),
-  flightCodes: [],
-  _flights: {},
   flights: {},
-  currentFlightCode: null,
-  airlineAccounts: [],
   airlines: {},
   insurances: {},
-
-  buyInsuranceModal: new bootstrap.Modal('#buyInsuranceModal'),
-  $buyInsuranceFlightCode: DOM.elid('buyInsuranceFlightCode'),
-  $buyInsurancePrice: DOM.elid('buyInsurancePrice'),
-  $buyInsuranceConfirmButton: DOM.elid("buyInsuranceConfirmButton"),
-
-  registerFlightModal: new bootstrap.Modal('#registerFlightModal'),
-  $registerFlightCode: DOM.elid("registerFlightCode"),
-  $registerFlightButton: DOM.elid("registerFlightButton"),
-  $registerFlightConfirmButton: DOM.elid("registerFlightConfirmButton"),
-
-  registerAirlineModal: new bootstrap.Modal('#registerAirlineModal'),
-  $registerAirlineName: DOM.elid("registerAirlineName"),
-  $registerAirlineAddress: DOM.elid("registerAirlineAddress"),
-  $registerAirlineButton: DOM.elid("registerAirlineButton"),
-  $registerAirlineConfirmButton: DOM.elid("registerAirlineConfirmButton"),
-
-  fundAirlineModal: new bootstrap.Modal('#fundAirlineModal'),
-  $fundAirlineAmount: DOM.elid("fundAirlineAmount"),
-  $fundAirlineConfirmButton: DOM.elid("fundAirlineConfirmButton"),
-  $fundAirlineButton: DOM.elid("fundAirlineButton"),
-
-  $filterFlights: DOM.elid("filterFlights"),
 
   statusCodes: {
     STATUS_CODE_UNKNOWN: 0,
@@ -62,188 +35,154 @@ const App = {
     STATUS_CODE_LATE_OTHER: 50,
   },
 
-  errorToast: new bootstrap.Toast('#errorToast'),
-  $errorToastBody: DOM.elid('errorToastBody'),
-  successToast: new bootstrap.Toast('#successToast'),
-  $successToastBody: DOM.elid('successToastBody'),
-  infoToast: new bootstrap.Toast('#infoToast'),
-  $infoToastBody: DOM.elid('infoToastBody'),
+  start: async (web3) => {
+    App.currentAccount = await App.getFirstAccount(web3);
 
-  showErrorToast: (message) => {
-    App.$errorToastBody.setHTML(message);
-    App.errorToast.show();
-  },
+    App.contract = new Contract(web3);
+    App.contract.setCurrentAccount(App.currentAccount);
+    App.contract.setupEventHandlers(App.getContractEventHandlers());
 
-  showSuccessToast: (message) => {
-    App.$successToastBody.setHTML(message);
-    App.successToast.show();
-  },
-  showInfoToast: (message) => {
-    App.$infoToastBody.setHTML(message);
-    App.infoToast.show();
-  },
-  initContracts: () => {
-    App.flightSuretyApp = new App.web3.eth.Contract(FlightSuretyApp.abi, config.contracts.app);
-    App.flightSuretyData = new App.web3.eth.Contract(FlightSuretyData.abi, config.contracts.data);
-  },
-  start: async () => {
-    App.initContracts();
-    App.updateDOM();
-    App.setupDomEvents();
-    App.setupBlockchainEvents();
-  },
-  updateDOM() {
-    App.getFlightsData()
-    .then((data) => {
-      let i = 0;
-      App.flightCodes.forEach((fc) => {
-        App._flights[fc] = {...data[i]};
-        i++;
-      })
+    if (App.metamask) {
+      App.setupMetamaskEvents()
+    }
 
-      return App.getAirlinesData(App._flights);
-    })
-    .then(data => {
-      let i = 0;
-      App.airlineAccounts.forEach((a) => {
-        App.airlines[a] = {...data[i]};
-        i++;
-      })
-      if (!Array.from(App.airlineAccounts).includes(App.currentAccount)) {
-        DOM.elid("airlineActionsDropdown").style["display"] = "none";
-      } else {
-        DOM.elid("airlineActionsDropdown").style["display"] = "block";
+    App.ui = new UI("flights-list");
 
-        if (App.airlines[App.currentAccount].hasFunded) {
-          App.$fundAirlineButton.classList.add("disabled")
-        }
-      }
-
-      return App.getFlightInsuranceData();
-    })
-    .then(data => {
-      let i = 0;
-      App.flightCodes.forEach((fc) => {
-        App.insurances[fc] = {...data[i]};
-        i++;
-      })
-
-      // finally do an initial filtering
-      App.filterFlights();
-    })
-    .catch(err => {
-      App.showErrorToast("Failed to retrieve flight data");
-      console.error(err);
-    });
+    await App.updateDom();
   },
-  getAirlinesData: async (flights) => {
-    App.airlineAccounts = new Set(Object.values(flights).map(f => (f.airline.toLowerCase())));
-    return Promise.all(
-      Array.from(App.airlineAccounts).map((a) => App.flightSuretyApp.methods.getAirlineData(a).call())
-    );
+  getFirstAccount:async (web3) => {
+    const accounts = await web3.eth.getAccounts();
+    return accounts[0].toLowerCase();
   },
-  getFlightInsuranceData: async () => {
-    return Promise.all(
-      App.flightCodes.map((fc) => App.flightSuretyApp.methods.getFlightInsuranceData(App.currentAccount, fc).call())
-    );
-  },
-  getFlightsData: async () => {
-    App.flightCodes = [];
-    App.flightCodes = await App.flightSuretyApp.methods.getFlightCodes().call();
+  onMetamaskAccountChange: async (accounts) => {
+    const firstAccount = accounts[0].toLowerCase();
 
-    return Promise.all(
-      App.flightCodes.map((fc) => App.flightSuretyApp.methods.getFlightData(fc).call())
-    );
+    App.currentAccount = firstAccount;
+    App.contract.setCurrentAccount(firstAccount);
+    console.log('Account changed: ', firstAccount);
+
+    await App.updateDom();
+  },
+  setupMetamaskEvents() {
+    App.metamask.on('accountsChanged', App.onMetamaskAccountChange);
+  },
+  updateDom: async () => {
+    const isOperational = await App.contract.isOperational();
+
+    if (!isOperational) {
+      App.ui.setNotOperational();
+      return;
+    }
+
+    App.ui.setOperational();
+
+    App.ui.hideActionsMenu();
+    App.ui.renderSpinner();
+    await App.syncContractData();
+    App.renderDom();
+  },
+  syncContractData: async () => {
+    const contractData = await App.contract.getContractData();
+
+    App.flights = contractData.flights;
+    App.airlines = contractData.airlines;
+    App.insurances = contractData.insurances;
+  },
+  displayError: (err, msg) => {
+    App.ui.showErrorToast(msg);
+    console.error(err);
   },
   fundAirline: () => {
-    const amount = App.$fundAirlineAmount.value;
-    App.flightSuretyApp.methods.fundAirline().send({from: App.currentAccount, value: utils.ethToWei(parseInt(amount))})
+    const amount = parseInt(App.ui.$fundAirlineAmount.value);
+
+    App.contract.fundAirline(amount)
     .then(() => {
-      App.fundAirlineModal.hide();
-      App.showSuccessToast("Your funding was submitted successfully");
+      App.ui.fundAirlineModal.hide();
+      App.ui.showSuccessToast("Your funding was submitted successfully");
+      App.airlines[App.currentAccount].hasFunded = true;
+      App.renderDom();
     })
     .catch(err => {
-      App.fundAirlineModal.hide();
-      App.showErrorToast(`Failed submit funding`);
-      console.error(err);
-    });
+      App.ui.fundAirlineModal.hide();
+      App.displayError(err, "Failed submit funding");
+    })
   },
   registerAirline: () => {
-    const name = App.$registerAirlineName.value;
-    const address = App.$registerAirlineAddress.value;
-    App.flightSuretyApp.methods.registerAirline(address, name).send({from: App.currentAccount})
+    const address = App.ui.$registerAirlineAddress.value;
+    const name = App.ui.$registerAirlineName.value;
+
+    App.contract.registerAirline(address, name)
     .then(() => {
-      App.registerAirlineModal.hide();
-      App.showSuccessToast("Your vote has been registered");
+      App.ui.registerAirlineModal.hide();
+      App.ui.showSuccessToast("Your vote has been registered");
     })
     .catch(err => {
-      App.registerAirlineModal.hide();
-      App.showErrorToast(`Failed to vote for new airline: ${parseError(err)}`);
-      console.error(err);
+      App.ui.registerAirlineModal.hide();
+      App.displayError(err, `Failed to vote for new airline: ${utils.cleanError(err)}`);
     });
   },
   registerFlight: () => {
-    const flightCode = App.$registerFlightCode.value;
-    App.flightSuretyApp.methods.registerFlight(flightCode).send({from: App.currentAccount})
+    const flightCode = App.ui.$registerFlightCode.value;
+
+    App.contract.registerFlight(flightCode)
     .then(() => {
-      App.registerFlightModal.hide();
-      App.showSuccessToast("Flight was successfully registered");
-      App.updateDOM();
+      App.ui.registerFlightModal.hide();
+      App.ui.showSuccessToast("Flight was successfully registered");
+      return App.contract.getFlightData(flightCode);
+    })
+    .then((data) => {
+      App.flights[flightCode] = {...data};
+      App.insurances[flightCode] = {
+        amount: 0,
+        refundAmount: 0,
+        refundWithdrawn: false
+      }
+      App.renderFlights();
     })
     .catch(err => {
-      App.registerFlightModal.hide();
-      App.showErrorToast(`Failed to register flight: ${parseError(err)}`);
-      console.error(err);
+      App.ui.registerFlightModal.hide();
+      App.displayError(err, `Failed to register flight: ${utils.cleanError(err)}`);
     });
   },
   buyInsurance: () => {
-    const value = utils.ethToWei(parseInt(App.$buyInsurancePrice.value));
-    App.flightSuretyApp.methods.buyInsurance(App.currentFlightCode).send(
-      {
-        from: App.currentAccount,
-        value
-      })
+    const flightCode = App.ui.$buyInsuranceFlightCode.value;
+    const amount = parseInt(App.ui.$buyInsurancePrice.value);
+
+    App.contract.buyInsurance(flightCode, amount)
     .then(() => {
-      App.buyInsuranceModal.hide();
-      App.showSuccessToast("Insurance was successfully bought");
-      App.insurances[App.currentFlightCode].amount = value;
-      App.renderFlights(App.flights);
+      App.ui.buyInsuranceModal.hide();
+      App.ui.showSuccessToast("Insurance was successfully bought");
+      App.insurances[flightCode].amount = utils.ethToWei(amount);
+      App.renderFlights();
     })
     .catch(err => {
-      App.buyInsuranceModal.hide();
-      App.showErrorToast("Failed to retrieve flight data");
-      console.error(err);
+      App.ui.buyInsuranceModal.hide();
+      App.displayError(err, "Failed to buy insurance");
     });
   },
   withdrawRefund: (flightCode) => {
-    App.flightSuretyApp.methods.withdrawInsuranceRefund(flightCode).send({from: App.currentAccount})
+    App.contract.withdrawRefund(flightCode)
     .then(() => {
       App.insurances[flightCode].refundWithdrawn = true;
-      App.renderFlights(App.flights);
+      App.renderFlights();
     })
     .catch(err => {
-      App.showErrorToast("Failed to withdraw refund");
-      console.error(err);
+      App.displayError(err, "Failed to withdraw refund");
     })
   },
   fetchFlightStatus: (flightCode) => {
     const timestamp = utils.now();
-    App.flightSuretyApp.methods.fetchFlightStatus(flightCode, timestamp).send({from: App.currentAccount})
+
+    App.contract.fetchFlightStatus(flightCode, timestamp)
     .then(() => {
-      App.flights[App.currentFlightCode].flightStatusLoading = true;
-      App.renderFlights(App.flights);
+      App.flights[flightCode].flightStatusLoading = true;
+      App.renderFlights();
     })
     .catch(err => {
-      App.showErrorToast(`Failed to request flight status for flight ${flightCode}`);
-      console.error(err);
+      App.displayError(err, `Failed to request flight status for flight ${flightCode}`);
     })
   },
-  filterFlights: () => {
-    const filterValue = App.$filterFlights.value.toLowerCase();
-    App.flights = Object.fromEntries(Object.entries(App._flights).filter(([key]) => filterValue === "" || key.toLowerCase().includes(filterValue)));
-    App.renderFlights(App.flights);
-  },
-  createFlightListItem: (flightCode, flightData) => {
+  createFlightListItem: (flightCode, flightData, insuranceData) => {
     let listItem = DOM.a({
       href: "#",
       className: "list-group-item"
@@ -257,7 +196,6 @@ const App = {
       .appendChild(DOM.strong())
       .appendChild(DOM.text(flightCode));
 
-    const insuranceData = App.insurances[flightCode]
     let insuranceStatus = "";
     if (insuranceData.refundWithdrawn) {
       insuranceStatus = "Refunded"
@@ -329,7 +267,7 @@ const App = {
     insuranceButton["disabled"] = flightData.statusCodeVerified;
 
     let fetchStatusButton = listItem.appendChild(DOM.button({
-      className: "btn btn-sm btn-secondary",
+      className: "btn btn-sm btn-secondary mb-2",
       id: `fetch-status-button_${flightCode}`
     }))
     fetchStatusButton.style["float"] = "right";
@@ -361,112 +299,92 @@ const App = {
       return { status: "DELAYED", reason: "unknown reason" };
     }
   },
-  renderFlights: (flights) => {
-    App.flightsListEl.innerHTML = "";
-
-    Object.keys(flights).forEach(flightCode => {
-      const flightListItem = App.createFlightListItem(flightCode, flights[flightCode]);
-      App.flightsListEl.appendChild(flightListItem);
-    });
-
-    App.updateButtonsEvents();
-
-    App._initTooltips();
+  renderDom: () => {
+    App.renderAirlineActions();
+    App.renderFlights();
+    App.setupDomEvents();
   },
-  updateButtonsEvents: () => {
-    App.flightCodes.forEach(fc => {
-      try {
-        DOM.elid(`insurance-button_${fc}`).addEventListener('click', () => {
-          App.currentFlightCode = fc;
-          App.$buyInsuranceFlightCode.value = fc;
-          App.buyInsuranceModal.show();
-        });
-      } catch {} // swallow errors of not existing buttons
+  renderAirlineActions: () => {
+    const airlineAccounts = Object.keys(App.airlines);
+    const currentAccountIsAirline = airlineAccounts.includes(App.currentAccount);
 
-      try {
+    if (!currentAccountIsAirline) {
+      App.ui.hideActionsMenu();
+      return;
+    }
 
-        DOM.elid(`withdraw-button_${fc}`).addEventListener('click', () => {
-          App.withdrawRefund(fc);
-        });
-      } catch {} // swallow errors of not existing buttons
+    App.ui.showActionsMenu();
 
-      try {
-        DOM.elid(`fetch-status-button_${fc}`).addEventListener('click', () => {
-          App.currentFlightCode = fc;
-          App.fetchFlightStatus(fc);
-        });
-      } catch {} // swallow errors of not existing buttons
-    })
+    const hasFunded = App.airlines[App.currentAccount].hasFunded;
+
+    if (hasFunded) {
+      App.ui.enableContributingAirlineActions();
+    } else {
+      App.ui.disableContributingAirlineActions();
+    }
+
   },
-  setupBlockchainEvents() {
-    App.flightSuretyApp.events.FlightStatusReceived((error, event) => {
-      const data = event.returnValues;
-      console.log("Received FlightStatusReceived:", data);
-      App.flights[data.flightCode].statusCode = data.statusCode;
-      App.flights[data.flightCode].statusCodeVerified = data.verified;
-      App.flights[data.flightCode].updatedTimestamp = data.timestamp;
-      App.flights[data.flightCode].flightStatusLoading = false;
-      App.renderFlights(App.flights);
-    });
+  renderFlights: () => {
+    const filterValue = App.ui.$filterFlights.value.toLowerCase();
+    let flights = filterValue.length > 0
+    ? Object.fromEntries(Object.entries(App.flights).filter(([key]) => filterValue === "" || key.toLowerCase().includes(filterValue)))
+    : App.flights;
 
-    App.flightSuretyApp.events.FlightInsuranceRefundCredited((error, event) => {
-      const data = event.returnValues;
-      console.log("Received FlightInsuranceRefundCredited:", data);
-      if (data.passenger.toLowerCase() == App.currentAccount.toLowerCase()) {
-        App.showInfoToast(`A refund has been credited to your account due to delay of flight: ${data.flightCode}`);
-        App.insurances[data.flightCode].refundAmount = data.refundAmount;
-        App.renderFlights(App.flights);
-      }
+    const flightCodes = Object.keys(flights).reverse();
+
+    const flightListItems = flightCodes.map(fc => App.createFlightListItem(fc, flights[fc], App.insurances[fc]));
+
+    App.ui.renderFlightListItems(flightListItems);
+
+    App.setupButtonsEvents(flightCodes);
+  },
+  onFlightStatusReceived: (data) => {
+    App.flights[data.flightCode].statusCode = data.statusCode;
+    App.flights[data.flightCode].statusCodeVerified = data.verified;
+    App.flights[data.flightCode].updatedTimestamp = data.timestamp;
+    App.flights[data.flightCode].flightStatusLoading = false;
+    App.renderFlights();
+  },
+  onFlightInsuranceRefundCredited: (data) => {
+    if (data.passenger.toLowerCase() == App.currentAccount.toLowerCase()) {
+      App.ui.showInfoToast(`A refund has been credited to your account due to delay of flight: ${data.flightCode}`);
+      App.insurances[data.flightCode].refundAmount = data.refundAmount;
+      App.renderFlights();
+    }
+  },
+  getContractEventHandlers: () => {
+    return {
+      FlightStatusReceived: App.onFlightStatusReceived,
+      FlightInsuranceRefundCredited: App.onFlightInsuranceRefundCredited
+    };
+  },
+  onInsuranceButtonClick: (flightCode) => {
+    return () => {
+      App.ui.$buyInsuranceFlightCode.value = flightCode;
+      App.ui.buyInsuranceModal.show();
+    }
+  },
+  onWithdrawButtonClick: (flightCode) => () => App.withdrawRefund(flightCode),
+  onFetchStatusButtonClick: (flightCode) => () => App.fetchFlightStatus(flightCode),
+  setupButtonsEvents: (flightCodes) => {
+    flightCodes.forEach(fc => {
+      App.ui.on("click", DOM.elid(`insurance-button_${fc}`), App.onInsuranceButtonClick(fc));
+      App.ui.on("click", DOM.elid(`withdraw-button_${fc}`), App.onWithdrawButtonClick(fc));
+      App.ui.on("click", DOM.elid(`fetch-status-button_${fc}`), App.onFetchStatusButtonClick(fc));
     })
   },
   setupDomEvents: () => {
-    App.$buyInsuranceConfirmButton.addEventListener("click", App.buyInsurance);
+    App.ui.on("click", App.ui.$buyInsuranceConfirmButton, App.buyInsurance);
+    App.ui.on("click", App.ui.$registerAirlineButton, () => { App.ui.registerAirlineModal.show(); });
+    App.ui.on("click", App.ui.$registerAirlineConfirmButton, App.registerAirline);
+    App.ui.on("click", App.ui.$registerFlightButton, () => { App.ui.registerFlightModal.show(); });
+    App.ui.on("click", App.ui.$registerFlightConfirmButton, App.registerFlight);
+    App.ui.on("click", App.ui.$fundAirlineButton, () => { App.ui.fundAirlineModal.show(); });
+    App.ui.on("click", App.ui.$fundAirlineConfirmButton, App.fundAirline);
+    App.ui.on("keyup", App.ui.$filterFlights, App.renderFlights);
 
-    App.$registerAirlineButton.addEventListener("click", () => {
-      App.registerAirlineModal.show();
-    });
-    App.$registerAirlineConfirmButton.addEventListener("click", App.registerAirline);
-
-    App.$registerFlightButton.addEventListener("click", () => {
-      App.registerFlightModal.show();
-    });
-    App.$registerFlightConfirmButton.addEventListener("click", App.registerFlight);
-
-    App.$fundAirlineButton.addEventListener("click", () => {
-      App.fundAirlineModal.show();
-    });
-    App.$fundAirlineConfirmButton.addEventListener("click", App.fundAirline);
-
-    App.$filterFlights.addEventListener("keyup", App.filterFlights);
-  },
-  _initTooltips: () => {
-    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
-    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    App.setupButtonsEvents(Object.keys(App.flights));
   }
 };
 
 window.App = App;
-
-window.addEventListener("load", async () => {
-  if (window.ethereum) {
-    // use MetaMask's provider
-    App.web3 = new Web3(window.ethereum);
-    window.ethereum.enable(); // get permission to access accounts
-
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    App.currentAccount = accounts[0].toLowerCase();
-
-    window.ethereum.on('accountsChanged', async (accounts) => {
-      App.currentAccount = accounts[0];
-      console.log('Account changed: ', App.currentAccount.toLowerCase());
-      App.updateDOM();
-    });
-  } else {
-    console.warn(
-      "No web3 detected. Falling back to http://127.0.0.1:8545. You should remove this fallback when you deploy live",
-    );
-    App.web3 = new Web3(new Web3.providers.WebsocketProvider(config.provider.replace('http', 'ws')));
-  }
-
-  await App.start();
-});
