@@ -23,6 +23,7 @@ const App = {
   flightSuretyData: null,
   flightsListEl: DOM.elid("flights-list"),
   flightCodes: [],
+  _flights: {},
   flights: {},
   currentFlightCode: null,
   airlineAccounts: [],
@@ -32,14 +33,25 @@ const App = {
   buyInsuranceModal: new bootstrap.Modal('#buyInsuranceModal'),
   $buyInsuranceFlightCode: DOM.elid('buyInsuranceFlightCode'),
   $buyInsurancePrice: DOM.elid('buyInsurancePrice'),
+  $buyInsuranceConfirmButton: DOM.elid("buyInsuranceConfirmButton"),
+
   registerFlightModal: new bootstrap.Modal('#registerFlightModal'),
   $registerFlightCode: DOM.elid("registerFlightCode"),
+  $registerFlightButton: DOM.elid("registerFlightButton"),
+  $registerFlightConfirmButton: DOM.elid("registerFlightConfirmButton"),
+
   registerAirlineModal: new bootstrap.Modal('#registerAirlineModal'),
   $registerAirlineName: DOM.elid("registerAirlineName"),
   $registerAirlineAddress: DOM.elid("registerAirlineAddress"),
+  $registerAirlineButton: DOM.elid("registerAirlineButton"),
+  $registerAirlineConfirmButton: DOM.elid("registerAirlineConfirmButton"),
+
   fundAirlineModal: new bootstrap.Modal('#fundAirlineModal'),
   $fundAirlineAmount: DOM.elid("fundAirlineAmount"),
+  $fundAirlineConfirmButton: DOM.elid("fundAirlineConfirmButton"),
   $fundAirlineButton: DOM.elid("fundAirlineButton"),
+
+  $filterFlights: DOM.elid("filterFlights"),
 
   statusCodes: {
     STATUS_CODE_UNKNOWN: 0,
@@ -85,11 +97,11 @@ const App = {
     .then((data) => {
       let i = 0;
       App.flightCodes.forEach((fc) => {
-        App.flights[fc] = {...data[i]};
+        App._flights[fc] = {...data[i]};
         i++;
       })
 
-      return App.getAirlinesData();
+      return App.getAirlinesData(App._flights);
     })
     .then(data => {
       let i = 0;
@@ -97,7 +109,6 @@ const App = {
         App.airlines[a] = {...data[i]};
         i++;
       })
-
       if (!Array.from(App.airlineAccounts).includes(App.currentAccount)) {
         DOM.elid("airlineActionsDropdown").style["display"] = "none";
       } else {
@@ -108,7 +119,6 @@ const App = {
         }
       }
 
-
       return App.getFlightInsuranceData();
     })
     .then(data => {
@@ -118,16 +128,16 @@ const App = {
         i++;
       })
 
-      // finally render the data
-      App.renderFlights(App.flights);
+      // finally do an initial filtering
+      App.filterFlights();
     })
     .catch(err => {
       App.showErrorToast("Failed to retrieve flight data");
       console.error(err);
     });
   },
-  getAirlinesData: async () => {
-    App.airlineAccounts = new Set(Object.values(App.flights).map(f => (f.airline.toLowerCase())));
+  getAirlinesData: async (flights) => {
+    App.airlineAccounts = new Set(Object.values(flights).map(f => (f.airline.toLowerCase())));
     return Promise.all(
       Array.from(App.airlineAccounts).map((a) => App.flightSuretyApp.methods.getAirlineData(a).call())
     );
@@ -181,7 +191,6 @@ const App = {
       App.updateDOM();
     })
     .catch(err => {
-      console.log(err);
       App.registerFlightModal.hide();
       App.showErrorToast(`Failed to register flight: ${parseError(err)}`);
       console.error(err);
@@ -228,6 +237,11 @@ const App = {
       App.showErrorToast(`Failed to request flight status for flight ${flightCode}`);
       console.error(err);
     })
+  },
+  filterFlights: () => {
+    const filterValue = App.$filterFlights.value.toLowerCase();
+    App.flights = Object.fromEntries(Object.entries(App._flights).filter(([key]) => filterValue === "" || key.toLowerCase().includes(filterValue)));
+    App.renderFlights(App.flights);
   },
   createFlightListItem: (flightCode, flightData) => {
     let listItem = DOM.a({
@@ -332,17 +346,6 @@ const App = {
 
     return listItem;
   },
-  getTimeFromTimestamp(timestamp) {
-    const date = new Date(timestamp * 1000);
-
-    return date.toLocaleTimeString([], {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  },
   getStatusDetails: (statusCode) => {
     if (statusCode == App.statusCodes.STATUS_CODE_UNKNOWN) {
       return { status: "UNKNOWN", reason: "" };
@@ -417,19 +420,24 @@ const App = {
     })
   },
   setupDomEvents: () => {
-    DOM.elid("buyInsuranceConfirmButton").addEventListener("click", App.buyInsurance);
-    DOM.elid("registerAirlineButton").addEventListener("click", () => {
+    App.$buyInsuranceConfirmButton.addEventListener("click", App.buyInsurance);
+
+    App.$registerAirlineButton.addEventListener("click", () => {
       App.registerAirlineModal.show();
     });
-    DOM.elid("registerAirlineConfirmButton").addEventListener("click", App.registerAirline);
-    DOM.elid("registerFlightButton").addEventListener("click", () => {
+    App.$registerAirlineConfirmButton.addEventListener("click", App.registerAirline);
+
+    App.$registerFlightButton.addEventListener("click", () => {
       App.registerFlightModal.show();
     });
-    DOM.elid("registerFlightConfirmButton").addEventListener("click", App.registerFlight);
-    DOM.elid("fundAirlineButton").addEventListener("click", () => {
+    App.$registerFlightConfirmButton.addEventListener("click", App.registerFlight);
+
+    App.$fundAirlineButton.addEventListener("click", () => {
       App.fundAirlineModal.show();
     });
-    DOM.elid("fundAirlineConfirmButton").addEventListener("click", App.fundAirline);
+    App.$fundAirlineConfirmButton.addEventListener("click", App.fundAirline);
+
+    App.$filterFlights.addEventListener("keyup", App.filterFlights);
   },
   _initTooltips: () => {
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
