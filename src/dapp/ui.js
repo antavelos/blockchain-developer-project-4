@@ -120,6 +120,7 @@ export default class UI {
     try {
       element.addEventListener(eventType, callback);
     } catch(err) {
+      // ignore errors of missing elements
       if (!(err instanceof TypeError)) {
         console.log(err);
       }

@@ -1,0 +1,7 @@
+{
+	"provider": "http://localhost:8545",
+	"contracts": {
+		"data": "0xF309095d54694A7C86a682faB0DDea97546eA65e",
+		"app": "0xa1cEc8f3A1c1AD6c5f5e82912f4d7dfdEeC84685"
+	}
+}

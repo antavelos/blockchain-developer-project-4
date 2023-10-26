@@ -1,5 +1,5 @@
-import config from './config.json';
-import Contract from './contract';
+import config from '../../config/config.json';
+import AppContract from '../contracts/appContract';
 import UI from './ui';
 import * as utils from '../utils.js';
 import DOM from './dom';
@@ -38,7 +38,7 @@ const App = {
   start: async (web3) => {
     App.currentAccount = await App.getFirstAccount(web3);
 
-    App.contract = new Contract(web3);
+    App.contract = new AppContract(web3);
     App.contract.setCurrentAccount(App.currentAccount);
     App.contract.setupEventHandlers(App.getContractEventHandlers());
 
@@ -264,7 +264,7 @@ const App = {
       id: `insurance-button_${flightCode}`,
     }));
     insuranceButton.appendChild(DOM.text("Buy insurance"));
-    insuranceButton["disabled"] = flightData.statusCodeVerified;
+    insuranceButton["disabled"] = flightData.statusCodeVerified || insuranceData.amount > 0;
 
     let fetchStatusButton = listItem.appendChild(DOM.button({
       className: "btn btn-sm btn-secondary mb-2",
@@ -286,23 +286,41 @@ const App = {
   },
   getStatusDetails: (statusCode) => {
     if (statusCode == App.statusCodes.STATUS_CODE_UNKNOWN) {
-      return { status: "UNKNOWN", reason: "" };
+      return {
+        status: "UNKNOWN",
+        reason: ""
+      };
     } else if (statusCode == App.statusCodes.STATUS_CODE_LATE_AIRLINE) {
-      return { status: "DELAYED", reason: "airline fault" };
+      return {
+        status: "DELAYED",
+        reason: "airline fault"
+      };
     } else if (statusCode == App.statusCodes.STATUS_CODE_LATE_TECHNICAL) {
-      return { status: "DELAYED", reason: "technical reasons" };
+      return {
+        status: "DELAYED",
+        reason: "technical reasons"
+      };
     } else if (statusCode == App.statusCodes.STATUS_CODE_LATE_WEATHER) {
-      return { status: "DELAYED", reason: "weather conditions" };
+      return {
+        status: "DELAYED",
+        reason: "weather conditions"
+      };
     } else if (statusCode == App.statusCodes.STATUS_CODE_ON_TIME) {
-      return { status: "ON TIME", reason: "" };
+      return {
+        status: "ON TIME"
+        , reason: ""
+      };
     } else if (statusCode == App.statusCodes.STATUS_CODE_LATE_OTHER) {
-      return { status: "DELAYED", reason: "unknown reason" };
+      return {
+        status: "DELAYED",
+        reason: "unknown reason"
+      };
     }
   },
   renderDom: () => {
     App.renderAirlineActions();
     App.renderFlights();
-    App.setupDomEvents();
+    App.setupFixedElementsDomEvents();
   },
   renderAirlineActions: () => {
     const airlineAccounts = Object.keys(App.airlines);
@@ -326,9 +344,10 @@ const App = {
   },
   renderFlights: () => {
     const filterValue = App.ui.$filterFlights.value.toLowerCase();
-    let flights = filterValue.length > 0
-    ? Object.fromEntries(Object.entries(App.flights).filter(([key]) => filterValue === "" || key.toLowerCase().includes(filterValue)))
-    : App.flights;
+
+    const flights = filterValue.length > 0
+      ? Object.fromEntries(Object.entries(App.flights).filter(([key]) => filterValue === "" || key.toLowerCase().includes(filterValue)))
+      : App.flights;
 
     const flightCodes = Object.keys(flights).reverse();
 
@@ -336,9 +355,10 @@ const App = {
 
     App.ui.renderFlightListItems(flightListItems);
 
-    App.setupButtonsEvents(flightCodes);
+    App.setupFlightButtonsEvents(flightCodes);
   },
   onFlightStatusReceived: (data) => {
+    console.log(`Status code: ${data.statusCode} | Verified: ${data.verified}`);
     App.flights[data.flightCode].statusCode = data.statusCode;
     App.flights[data.flightCode].statusCodeVerified = data.verified;
     App.flights[data.flightCode].updatedTimestamp = data.timestamp;
@@ -366,14 +386,14 @@ const App = {
   },
   onWithdrawButtonClick: (flightCode) => () => App.withdrawRefund(flightCode),
   onFetchStatusButtonClick: (flightCode) => () => App.fetchFlightStatus(flightCode),
-  setupButtonsEvents: (flightCodes) => {
+  setupFlightButtonsEvents: (flightCodes) => {
     flightCodes.forEach(fc => {
       App.ui.on("click", DOM.elid(`insurance-button_${fc}`), App.onInsuranceButtonClick(fc));
       App.ui.on("click", DOM.elid(`withdraw-button_${fc}`), App.onWithdrawButtonClick(fc));
       App.ui.on("click", DOM.elid(`fetch-status-button_${fc}`), App.onFetchStatusButtonClick(fc));
     })
   },
-  setupDomEvents: () => {
+  setupFixedElementsDomEvents: () => {
     App.ui.on("click", App.ui.$buyInsuranceConfirmButton, App.buyInsurance);
     App.ui.on("click", App.ui.$registerAirlineButton, () => { App.ui.registerAirlineModal.show(); });
     App.ui.on("click", App.ui.$registerAirlineConfirmButton, App.registerAirline);
@@ -382,8 +402,6 @@ const App = {
     App.ui.on("click", App.ui.$fundAirlineButton, () => { App.ui.fundAirlineModal.show(); });
     App.ui.on("click", App.ui.$fundAirlineConfirmButton, App.fundAirline);
     App.ui.on("keyup", App.ui.$filterFlights, App.renderFlights);
-
-    App.setupButtonsEvents(Object.keys(App.flights));
   }
 };
 

@@ -1,9 +1,7 @@
-import config from './config.json';
+import config from '../../config/config.json';
 import * as utils from '../utils.js';
-import FlightSuretyApp from '../../build/contracts/FlightSuretyApp.json';
-import FlightSuretyData from '../../build/contracts/FlightSuretyData.json';
+import AppContract from '../contracts/appContract.js';
 import Web3 from 'web3';
-import express from 'express';
 
 const ORACLE_REGISTRATION_FEE = utils.ethToWei(1);
 
@@ -21,214 +19,72 @@ const statusCodes = {
   STATUS_CODE_LATE_OTHER: 50,
 };
 
-let web3 = new Web3(new Web3.providers.WebsocketProvider(config.provider.replace('http', 'ws')));
-// web3.eth.defaultAccount = web3.eth.accounts[0];
+const Server = {
+  contract: null,
+  oracles: null,
 
-let flightSuretyApp;
-let flightSuretyData;
-let accounts;
-let owner;
-let airlineAccounts;
-let passengerAccounts;
-let oracleAccounts;
-let flights = [];
+  run: async () => {
+    const web3 = new Web3(new Web3.providers.WebsocketProvider(config.provider.replace('http', 'ws')));
+
+    const accounts = await web3.eth.getAccounts();
+    Server.oracles = accounts.slice(20, 40);
+
+    Server.contract = new AppContract(web3);
+    Server.contract.setupEventHandlers(Server.getContractEventHandlers());
+
+    console.log("\n\nListening to contract events...");
+  },
+
+  onFlightStatusRequested: async (data) => {
+    console.log("\n\nReceived FlightStatusRequested:\n", data);
+
+    for (let i = 0; i < Server.oracles.length; i++) {
+      let indexes = await Server.contract.getMyIndexes(Server.oracles[i]);
+
+      if (!indexes.includes(data.oracleIndex)) {
+        continue;
+      }
+
+      let statusCode;
+      // give STATUS_CODE_LATE_AIRLINE at least 40% higher probability
+      if (utils.randomInt(10) < 4) {
+        statusCode = statusCodes.STATUS_CODE_LATE_AIRLINE;
+      } else {
+        const statusCodesValues = Object.values(statusCodes);
+        const randIdx = utils.randomInt(statusCodesValues.length)
+       statusCode = statusCodesValues[randIdx];
+      }
+
+      try {
+        await Server.contract.updateFlightStatus(
+          data.oracleIndex,
+          data.airline,
+          data.flightCode,
+          data.timestamp,
+          statusCode,
+          Server.oracles[i]
+        );
+
+        console.log(`Oracle ${i} (${indexes}) sent: ${statusCode}`)
+      } catch(err) {
+        console.log(`Oracle ${i} error: ${cleanError(err)}`);
+      }
+    }
+  },
+  getContractEventHandlers: () => {
+    return {
+      FlightStatusRequested: Server.onFlightStatusRequested,
+    };
+  },
+  setupContractEvents: async () => {
+    Server.contract.events.FlightStatusRequested({ fromBlock: "latest" }, async (error, event) => {
+
+    });
+  }
+};
 
 (async function() {
-  accounts = await web3.eth.getAccounts();
-  owner = accounts[0]
-  airlineAccounts = accounts.slice(1, 6);
-  passengerAccounts = accounts.slice(6, 20);
-  oracleAccounts = accounts.slice(20, 40);
 
-  await init();
+  await Server.run();
 
 }());
-
-async function initContracts() {
-  flightSuretyApp = new web3.eth.Contract(FlightSuretyApp.abi, config.contracts.app);
-  flightSuretyData = new web3.eth.Contract(FlightSuretyData.abi, config.contracts.data);
-
-  await flightSuretyData.methods.authorizeCaller(config.contracts.app).send({from: owner});
-}
-
-async function initEvents() {
-  flightSuretyApp.events.FlightStatusRequested({ fromBlock: 0 }, async (error, event) => {
-    console.log("Received FlightStatusRequested:", event.returnValues);
-    for (let i = 0; i < oracleAccounts.length; i++) {
-      let indexes = await flightSuretyApp.methods.getMyIndexes().call({from: oracleAccounts[i]});
-      if (indexes.includes(event.returnValues.oracleIndex)) {
-        let statusCode;
-        if (utils.randomInt(10) < 4) {
-          statusCode = statusCodes.STATUS_CODE_LATE_AIRLINE;
-        } else {
-          const statusCodesValues = Object.values(statusCodes);
-          const randIdx = utils.randomInt(statusCodesValues.length)
-         statusCode = statusCodesValues[randIdx];
-        }
-
-        try {
-          await flightSuretyApp.methods.updateFlightStatus(
-            event.returnValues.oracleIndex,
-            event.returnValues.airline,
-            event.returnValues.flightCode,
-            event.returnValues.timestamp,
-            statusCode)
-            .send({from: oracleAccounts[i], gas: 1000000});
-          console.log(`Oracle ${i} (${indexes}) sent: ${statusCode}`)
-        } catch(err) {
-          console.log(`Oracle ${i} error: ${cleanError(err)}`);
-        }
-      }
-    }
-  });
-
-  flightSuretyApp.events.FlightStatusReceived({ fromBlock: 0 }, (error, event) => {
-    console.log(`Received FlightStatusReceived --> Flight ${event.returnValues.flightCode}: ${event.returnValues.statusCode} (${event.returnValues.verified})`);
-  });
-
-  // TODO: remove
-  flightSuretyApp.events.Debug({ fromBlock: 0 }, (error, event) => {
-    console.log("----------> DEBUG <----------:", event.returnValues);
-  });
-}
-
-async function initAirlines() {
-  const fund = async (airlineAccount) => {
-    const data = await flightSuretyApp.methods.getAirlineData(airlineAccount).call({from: owner});
-    if (!data.hasFunded) {
-      console.log(`\Airline '${data.name}' initial fund: 10 ETH`);
-      await flightSuretyApp.methods.fundAirline().send({from: airlineAccount, value: utils.ethToWei(10)});
-    }
-  }
-
-  const register = async (airlineAccount, fromAirline) => {
-    const airlineName = `AIR-${utils.randomStr(4)}`;
-    const msg = `Airline ${airlineAccount}`;
-    try {
-      await flightSuretyApp.methods.registerAirline(
-        airlineAccount,
-        airlineName
-      ).send({from: fromAirline, gas: 1000000});
-      console.log(`${msg}: [OK]`)
-    } catch(err) {
-      console.log(`${msg}: [NOK]: ${cleanError(err)}`);
-    }
-  }
-
-  // the first airline is already registered upon deployment
-  const firstAirline = airlineAccounts[0];
-  await fund(firstAirline);
-
-  console.log("\nRegistering airlines without conensus\n");
-
-  // register 3 more flights
-  for (let i = 1; i < 4; i++) {
-    const airlineAccount = airlineAccounts[i];
-    await register(airlineAccount, firstAirline);
-  }
-
-  console.log("\nRegistering airlines with conensus\n");
-
-  //register one more flight with consensus
-  await register(airlineAccounts[4], airlineAccounts[0]);
-
-  await fund(airlineAccounts[1]);
-  await register(airlineAccounts[4], airlineAccounts[1]);
-
-  console.log("\nRegistered airline names:");
-  console.log(await flightSuretyApp.methods.getAirlineNames().call({from: owner}))
-};
-
-async function initFlights() {
-  const flightCodes = await flightSuretyApp.methods.getFlightCodes().call({from: owner});
-  if (flightCodes.length === 0) {
-    console.log("\nRegistering flights\n");
-
-    const register = async (flightCode, airlineAccount) => {
-      const msg = `Flight ${flightCode}`;
-      let success = true;
-      try {
-        await flightSuretyApp.methods.registerFlight(flightCode).send({from: airlineAccount, gas: 1000000});
-        console.log(`${msg}: [OK]`);
-      } catch(err) {
-        console.log(`${msg}: [NOK]: ${cleanError(err)}`);
-        success = false;
-      }
-      return success;
-    }
-
-    for(let i = 0; i < airlineAccounts.length; i++) {
-      for (let j = 0; j < 5; j++) {
-        const flightCode = `F-${utils.randomStr(6)}`;
-        if (await register(flightCode, airlineAccounts[i])) {
-          flights.push(flightCode);
-        }
-      }
-    }
-  }
-  console.log("\nRegistered flight codes:");
-  console.log(await flightSuretyApp.methods.getFlightCodes().call({from: owner}));
-}
-
-async function init() {
-  await initContracts();
-  await initAirlines();
-  await initFlights();
-  await initOracles();
-  await initEvents();
-};
-
-async function initOracles() {
-  console.log("\nRegistering oracles\n");
-
-  for(let i = 0; i < oracleAccounts.length; i++) {
-    const oracleAccount = oracleAccounts[i];
-
-    const msg = `Oracle ${oracleAccount}`;
-    try {
-      await flightSuretyApp.methods.registerOracle().send({from: oracleAccount, value: ORACLE_REGISTRATION_FEE, gas: 1000000});
-      console.log(`${msg}: [OK]`)
-    } catch(err) {
-      console.log(`${msg}: [NOK]: ${cleanError(err)}`);
-    }
-  }
-};
-
-const app = express();
-app.get('/api', async (req, res) => {
-  res.send({
-    message: 'An API for use with your Dapp!'
-  });
-});
-app.get('/fetch', async (req, res) => {
-  const flightCode = req.query.flightCode;
-  const timestamp = utils.now();
-
-  flightSuretyApp.methods.fetchFlightStatus(flightCode, timestamp).send({from: owner, gas: 1000000})
-  .then(() => {
-    res.send({
-      message: "Request submited",
-    });
-  })
-  .catch(err => {
-    res.send({
-      message: cleanError(err),
-    });
-  })
-});
-app.get('/operational', async (req, res) => {
-  const flag = Boolean((parseInt(req.query.flag)));
-
-  flightSuretyApp.methods.setOperatingStatus(flag).send({from: owner, gas: 1000000})
-  .then(() => {
-    res.send({
-      message: `Operation set to ${flag}`,
-    });
-  })
-  .catch(err => {
-    res.send({
-      message: cleanError(err),
-    });
-  })
-});
-export default app;

@@ -21,9 +21,5 @@ module.exports = async (deployer) => {
       }
     };
 
-    [
-      '../src/dapp/config.json',
-      '../src/server/config.json'
-    ]
-      .forEach(path => saveConfig(config, path));
+    saveConfig(config, "../config/config.json");
 }
