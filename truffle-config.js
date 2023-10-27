@@ -6,16 +6,13 @@ module.exports = {
     development: {
       host: '127.0.0.1',
       port:8545,
-      // provider: function() {
-      //   return new HDWalletProvider(mnemonic, "http://127.0.0.1:8545/", 0, 50);
-      // },
       network_id: '*',
       gas: 4600000
     }
   },
   compilers: {
     solc: {
-      version: ">=0.6.0 <0.8.0"
+      version: "0.7.6"
     }
   }
 };
