@@ -46,8 +46,8 @@ const Server = {
       }
 
       let statusCode;
-      // give STATUS_CODE_LATE_AIRLINE at least 40% higher probability
-      if (utils.randomInt(10) < 4) {
+      // give STATUS_CODE_LATE_AIRLINE at least 30% higher probability
+      if (utils.randomInt(10) < 3) {
         statusCode = statusCodes.STATUS_CODE_LATE_AIRLINE;
       } else {
         const statusCodesValues = Object.values(statusCodes);

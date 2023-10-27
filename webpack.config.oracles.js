@@ -3,10 +3,10 @@ const nodeExternals = require('webpack-node-externals');
 const { RunScriptWebpackPlugin } = require('run-script-webpack-plugin');
 
 module.exports = {
-    entry: "./src/server/server.js",
+    entry: "./src/oracles/oracles.js",
     output: {
-      filename: "server.js",
-      path: path.resolve(__dirname, "dist/server"),
+      filename: "oracles.js",
+      path: path.resolve(__dirname, "dist/oracles"),
     },
     externalsPresets: {
         node: true
@@ -16,7 +16,7 @@ module.exports = {
     ],
   plugins: [
     new RunScriptWebpackPlugin({
-      name: 'server.js',
+      name: 'oracles.js',
     }),
   ],
 };
